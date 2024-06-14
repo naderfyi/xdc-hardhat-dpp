@@ -9,24 +9,23 @@ contract PublicPass {
 
     mapping(address => PublicData[]) public publicUserData;
 
+    event PublicDataStored(address indexed user, string key);
+
     function storePublicData(string memory _key, string memory _value) public {
-        PublicData memory newData = PublicData({
+        publicUserData[msg.sender].push(PublicData({
             key: _key,
             value: _value
-        });
-        publicUserData[msg.sender].push(newData);
+        }));
+        emit PublicDataStored(msg.sender, _key);
     }
 
-    function getPublicData(address _user) public view returns (string[] memory, string[] memory) {
-        PublicData[] memory dataList = publicUserData[_user];
-        string[] memory keys = new string[](dataList.length);
-        string[] memory values = new string[](dataList.length);
-
-        for (uint i = 0; i < dataList.length; i++) {
-            keys[i] = dataList[i].key;
-            values[i] = dataList[i].value;
+    function getPublicData(address _user, string memory _key) public view returns (string memory) {
+        require(_user != address(0), "Invalid user address");
+        for (uint i = 0; i < publicUserData[_user].length; i++) {
+            if (keccak256(bytes(publicUserData[_user][i].key)) == keccak256(bytes(_key))) {
+                return publicUserData[_user][i].value;
+            }
         }
-
-        return (keys, values);
+        revert("Key not found");
     }
 }

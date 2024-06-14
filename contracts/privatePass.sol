@@ -23,14 +23,19 @@ contract PrivatePass {
             newData.accessList[_allowedAddresses[i]] = true;
         }
 
-        // Aggregate data if it's a numeric value
-        uint256 numericValue = parseUint(_value);
-        aggregatedData[_key] += numericValue;  // Update the aggregate value
-        emit AggregateUpdated(_key, aggregatedData[_key]);
+        // Attempt to parse the value and update the aggregate if it's numeric
+        uint256 numericValue;
+        bool isNumeric;
+        (numericValue, isNumeric) = tryParseUint(_value);
+        if (isNumeric) {
+            aggregatedData[_key] += numericValue;  // Update the aggregate value
+            emit AggregateUpdated(_key, aggregatedData[_key]);
+        }
+        
         emit DataStored(msg.sender, _key);
     }
 
-    function parseUint(string memory _value) internal pure returns (uint256) {
+    function tryParseUint(string memory _value) internal pure returns (uint256, bool) {
         bytes memory b = bytes(_value);
         uint256 result = 0;
         bool hasDigits = false;
@@ -39,14 +44,11 @@ contract PrivatePass {
             if (b[i] >= 0x30 && b[i] <= 0x39) {
                 result = result * 10 + (uint256(uint8(b[i])) - 48);
                 hasDigits = true;
+            } else if (b[i] < 0x30 || b[i] > 0x39) {
+                return (0, false); // As soon as a non-digit is found, return false
             }
         }
-
-        if (!hasDigits) {
-            revert("Non-numeric data provided");
-        }
-
-        return result;
+        return (result, hasDigits);
     }
 
     function getAggregateData(string memory _key) public view returns (uint256) {

@@ -102,4 +102,44 @@ describe("PrivatePass and PublicPass Contracts", function () {
       expect(dataByUser2).to.equal(value);
     });
   });
+
+  describe("Handling Multiple Data Types per User", function () {
+    it("should handle multiple types of data for a single user correctly", async function () {
+      const user1 = addr1.address;
+      const publicDataType1 = "materialType";
+      const publicValue1 = "Lithium";
+      const privateDataType1 = "sourceLocation";
+      const privateValue1 = "Australia";
+      const privateDataType2 = "co2Emissions";
+      const privateValue1User1 = "100";  // Numeric data for aggregation
+      const privateValue1User2 = "150";  // Numeric data for aggregation
+      const allowedAddresses1 = [addr2.address]; // Only addr2 is authorized
+
+      // User 1 stores public data
+      await publicPass.connect(addr1).storePublicData(publicDataType1, publicValue1);
+      
+      // User 1 stores private data with specific access rights
+      await privatePass.connect(addr1).storePrivateData(privateDataType1, privateValue1, allowedAddresses1);
+      await privatePass.connect(addr1).storePrivateData(privateDataType2, privateValue1User1, allowedAddresses1);
+
+      // User 2 also stores data under the same numeric key to test aggregation
+      await privatePass.connect(addr2).storePrivateData(privateDataType2, privateValue1User2, allowedAddresses1);
+
+      // Retrieve public data by any user
+      const retrievedPublicData = await publicPass.connect(addr2).getPublicData(user1, publicDataType1);
+      expect(retrievedPublicData).to.equal(publicValue1);
+
+      // Retrieve private data by authorized user
+      const retrievedPrivateData = await privatePass.connect(addr2).getPrivateData(user1, privateDataType1);
+      expect(retrievedPrivateData).to.equal(privateValue1);
+
+      // Retrieve aggregated data to check if numeric values are correctly summed
+      const aggregatedData = await privatePass.getAggregateData(privateDataType2);
+      expect(aggregatedData.toString()).to.equal("250"); // Sum of 100 and 150
+
+      // Attempt to access private data by unauthorized user
+      await expect(privatePass.connect(addr3).getPrivateData(user1, privateDataType1))
+        .to.be.rejectedWith("Access denied or key not found");
+    });
+  });
 });

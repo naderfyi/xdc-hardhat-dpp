@@ -1,6 +1,6 @@
 # DBP Project
 
-This project demonstrates a Hardhat setup for deploying and testing smart contracts on the XDC network, including a private subnet and the Apothem testnet.
+Deploying and testing DBP smart contracts on the XDC network, on a private subnet and the Apothem testnet.
 
 ## Setup
 

@@ -25,7 +25,7 @@ describe("PrivatePass and PublicPass Contracts", function () {
   describe("PrivatePass Contract", function () {
     it("should allow storing and retrieving private data with correct access controls", async function () {
       const key = "sensitiveInfo";
-      const value = "secretData";
+      const value = "123";
       const allowedAddresses = [addr1.address];
 
       // Store data with access control
@@ -37,19 +37,42 @@ describe("PrivatePass and PublicPass Contracts", function () {
 
       // Unauthorized access attempt
       await expect(privatePass.connect(addr2).getPrivateData(owner.address, key))
+          .to.be.rejectedWith("Access denied or key not found");
+  });
+
+  it("should deny access to private data for unauthorized users", async function () {
+    const key = "privateInfo";
+    const value = "456";  // Changed to numeric value
+    const allowedAddresses = [addr1.address];
+
+    await privatePass.connect(owner).storePrivateData(key, value, allowedAddresses);
+
+    // Access attempt by unauthorized user
+    await expect(privatePass.connect(addr2).getPrivateData(owner.address, key))
         .to.be.rejectedWith("Access denied or key not found");
-    });
+  });
+});
 
-    it("should deny access to private data for unauthorized users", async function () {
-      const key = "privateInfo";
-      const value = "highlyConfidential";
-      const allowedAddresses = [addr1.address];
+  describe("Aggregation of Private Data", function () {
+    it("should correctly aggregate private data values with common keys from multiple users", async function () {
+        const key = "co2emission";
+        const value1 = "200";  // User 1's emission
+        const value2 = "300";  // User 2's emission
 
-      await privatePass.connect(owner).storePrivateData(key, value, allowedAddresses);
+        // User 1 stores data
+        await privatePass.connect(addr1).storePrivateData(key, value1, [addr1.address, addr2.address]);
+        // User 2 stores data
+        await privatePass.connect(addr2).storePrivateData(key, value2, [addr2.address, addr3.address]);
 
-      // Access attempt by unauthorized user
-      await expect(privatePass.connect(addr2).getPrivateData(owner.address, key))
-        .to.be.rejectedWith("Access denied or key not found");
+        // Retrieve aggregated data and convert BigNumber to string for comparison
+        const aggregatedData = await privatePass.getAggregateData(key);
+        expect(aggregatedData.toString()).to.equal("500");  // Compare as strings
+
+        // Unauthorized access checks
+        await expect(privatePass.connect(addr3).getPrivateData(addr1.address, key))
+            .to.be.rejectedWith("Access denied or key not found");
+        await expect(privatePass.connect(addr1).getPrivateData(addr2.address, key))
+            .to.be.rejectedWith("Access denied or key not found");
     });
   });
 

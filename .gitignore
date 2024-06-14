@@ -1,0 +1,7 @@
+/artifacts
+/cache
+/build-info
+/cache/solidity-files-cache.json
+/node_modules
+package-lock.json
+.env

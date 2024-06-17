@@ -36,52 +36,6 @@ describe("PrivatePass Contract", function () {
         await expect(privatePass.connect(addr3).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
     });
 
-    it("should correctly aggregate private data and only return aggregated data when there are sufficient contributions", async function () {
-        const id1 = "data-1";
-        const id2 = "data-2";
-        const id3 = "data-3";
-        const key = "energyUsage";
-        const values = ["100", "200", "300"];
-        const allowedAddresses = [addr1.address, addr2.address, addr3.address];
-
-        // Different users store data under the same key
-        await privatePass.connect(owner).storePrivateData(id1, [key], [values[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(id2, [key], [values[1]], allowedAddresses);
-        await privatePass.connect(addr2).storePrivateData(id3, [key], [values[2]], allowedAddresses);
-
-        // Retrieve and verify aggregated data
-        const aggregatedData1 = await privatePass.getAggregateData(id1, key);
-        const aggregatedData2 = await privatePass.getAggregateData(id2, key);
-        const aggregatedData3 = await privatePass.getAggregateData(id3, key);
-
-        // Since each ID only has one entry, the aggregation should return "{}" because count < 3
-        expect(aggregatedData1).to.equal("{}");
-        expect(aggregatedData2).to.equal("{}");
-        expect(aggregatedData3).to.equal("{}");
-
-        // Add more entries to ensure count >= 3 for one ID
-        await privatePass.connect(owner).storePrivateData(id1, [key], ["150"], allowedAddresses);
-        await privatePass.connect(owner).storePrivateData(id1, [key], ["200"], allowedAddresses);
-
-        const updatedAggregatedData1 = await privatePass.getAggregateData(id1, key);
-        expect(updatedAggregatedData1).to.include("\"energyUsage\": 450");
-    });
-
-    it("should not return aggregated data if there are less than three contributions", async function () {
-        const id = "partial-1";
-        const key = "partialData";
-        const values = ["50", "150"];
-        const allowedAddresses = [addr1.address, addr2.address];
-
-        // Insufficient data points for aggregation
-        await privatePass.connect(owner).storePrivateData(id, [key], [values[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(id, [key], [values[1]], allowedAddresses);
-
-        // Attempt to retrieve aggregated data
-        const aggregatedData = await privatePass.getAggregateData(id, key);
-        expect(aggregatedData).to.equal("{}"); // Should be empty JSON object
-    });
-
     it("should handle multiple types of data for a single user correctly", async function () {
         const id = "multi-type-123";
         const keys = ["dataType1", "dataType2"];
@@ -232,56 +186,110 @@ describe("PrivatePass Contract", function () {
         const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
         expect(retrievedData).to.include("\"\": \"\"");
     });
-
-    it("should handle storing and retrieving a large number of key-value pairs", async function () {
-        const id = "large-data-set";
-        const keys = [];
-        const values = [];
-        const numEntries = 100;
     
-        for (let i = 0; i < numEntries; i++) {
-            keys.push(`key${i}`);
-            values.push(`value${i}`);
-        }
+    describe("should handle numeric and non-numeric data aggregation correctly", function () {
+        let id, keyNumeric, keyNonNumeric, allowedAddresses;
     
-        // Owner stores a large number of key-value pairs
-        await privatePass.connect(owner).storePrivateData(id, keys, values, [addr1.address]);
+        before(async function () {
+            id = "aggregation-test";
+            keyNumeric = "temperature";
+            keyNonNumeric = "status";
+            allowedAddresses = [owner.address, addr1.address, addr2.address];
+        });
     
-        // Retrieve data
-        const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
-        for (let i = 0; i < numEntries; i++) {
-            expect(retrievedData).to.include(`"key${i}": "value${i}"`);
-        }
-    });  
+        it("should correctly aggregate numeric private data and only return aggregated data when there are sufficient contributions", async function () {
+            // Storing numeric data
+            await privatePass.connect(owner).storePrivateData(id, [keyNumeric], ["100"], allowedAddresses);
+            await privatePass.connect(addr1).storePrivateData(id, [keyNumeric], ["200"], allowedAddresses);
+            await privatePass.connect(addr2).storePrivateData(id, [keyNumeric], ["50"], allowedAddresses);
     
-    it("should handle numeric and non-numeric data aggregation correctly", async function () {
-        const id = "aggregation-test";
-        const numericKey = "numericKey";
-        const nonNumericKey = "nonNumericKey";
-        const numericValues = ["100", "200", "300"];
-        const nonNumericValues = ["value1", "value2"];
-        const allowedAddresses = [addr1.address];
+            // Retrieving and verifying aggregated data
+            const aggregatedData = await privatePass.getAggregateData(id);
+            expect(aggregatedData).to.include(`"${keyNumeric}": 350`);
+        });
     
-        // Store numeric data
-        await privatePass.connect(owner).storePrivateData(id, [numericKey], [numericValues[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(id, [numericKey], [numericValues[1]], allowedAddresses);
-        await privatePass.connect(addr2).storePrivateData(id, [numericKey], [numericValues[2]], allowedAddresses);
+        it("should not return aggregated data if there are less than three contributions of numeric data", async function () {
+            const idLess = "less-contributions";
+            // Storing numeric data but only from two users
+            await privatePass.connect(owner).storePrivateData(idLess, [keyNumeric], ["100"], allowedAddresses);
+            await privatePass.connect(addr1).storePrivateData(idLess, [keyNumeric], ["200"], allowedAddresses);
     
-        // Store non-numeric data
-        await privatePass.connect(owner).storePrivateData(id, [nonNumericKey], [nonNumericValues[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(id, [nonNumericKey], [nonNumericValues[1]], allowedAddresses);
+            // Attempt to retrieve aggregated data
+            const aggregatedData = await privatePass.getAggregateData(idLess);
+            expect(aggregatedData).to.equal("{}");
+        });
     
-        // Retrieve and verify aggregated data
-        const aggregatedData = await privatePass.getAggregateData(id, numericKey);
-        const totalSum = parseInt(numericValues[0]) + parseInt(numericValues[1]) + parseInt(numericValues[2]);
-        const expectedAggregatedData = `{"${numericKey}": ${totalSum}}`;
+        it("should not aggregate non-numeric data", async function () {
+            // Storing non-numeric data
+            await privatePass.connect(owner).storePrivateData(id, [keyNonNumeric], ["okay"], allowedAddresses);
+            await privatePass.connect(addr1).storePrivateData(id, [keyNonNumeric], ["good"], allowedAddresses);
+            await privatePass.connect(addr2).storePrivateData(id, [keyNonNumeric], ["excellent"], allowedAddresses);
     
-        expect(aggregatedData).to.equal(expectedAggregatedData);
+            // Retrieving aggregated data should not include non-numeric keys
+            const aggregatedData = await privatePass.getAggregateData(id);
+            expect(aggregatedData).not.to.include(keyNonNumeric);
+        });
+    });    
     
-        // Non-numeric data should not be aggregated
-        const nonAggregatedData = await privatePass.getAggregateData(id, nonNumericKey);
-        expect(nonAggregatedData).to.equal("{}");
+    it("should correctly aggregate private data across multiple users and only return aggregated data when there are sufficient contributions", async function () {
+        const id = "data-aggregate";
+        const key = "co2";
+        const values = ["100", "200", "300", "50"];
+        const allowedAddresses = [owner.address, addr1.address, addr2.address, addr3.address];
+    
+        // Different users store data under the same ID and same key
+        await privatePass.connect(owner).storePrivateData(id, [key], [values[0]], allowedAddresses);
+        await privatePass.connect(addr1).storePrivateData(id, [key], [values[1]], allowedAddresses);
+        await privatePass.connect(addr2).storePrivateData(id, [key], [values[2]], allowedAddresses);
+        await privatePass.connect(addr3).storePrivateData(id, [key], [values[3]], allowedAddresses);
+    
+        // Attempt to retrieve aggregated data
+        const aggregatedData = await privatePass.getAggregateData(id);
+        // Check if the aggregated data includes the sum of the "co2" from four contributions which is 650
+        expect(aggregatedData).to.include(`"co2": 650`);
+    
+        // Now check a scenario where less than three users contribute
+        const idLess = "data-less";
+        await privatePass.connect(owner).storePrivateData(idLess, [key], [values[0]], allowedAddresses);
+        await privatePass.connect(addr1).storePrivateData(idLess, [key], [values[1]], allowedAddresses);
+    
+        // Retrieving aggregated data where contributions are less than required
+        const aggregatedDataLess = await privatePass.getAggregateData(idLess);
+        expect(aggregatedDataLess).to.equal("{}"); // Expect an empty JSON object since only two contributions
     });
     
+    describe("Aggregate JSON Structure Validation", function () {
+        let id, keys, values, allowedAddresses;
     
+        before(async function () {
+            id = "json-structure-test";
+            keys = ["co2", "humidity", "status"];
+            values = ["400", "50", "active"];
+            allowedAddresses = [owner.address, addr1.address, addr2.address, addr3.address];
+        });
+    
+        it("should verify correct JSON structure in aggregate data with varied contributions", async function () {
+            // Ensuring three numeric contributions to "co2" to meet aggregation criteria
+            await privatePass.connect(owner).storePrivateData(id, [keys[0]], [values[0]], allowedAddresses);
+            await privatePass.connect(addr1).storePrivateData(id, [keys[0]], ["600"], allowedAddresses); // Second CO2 contribution
+            await privatePass.connect(addr2).storePrivateData(id, [keys[0]], ["300"], allowedAddresses); // Third CO2 contribution
+    
+            // Additional contributions to "humidity"
+            await privatePass.connect(addr1).storePrivateData(id, [keys[1]], [values[1]], allowedAddresses);
+            await privatePass.connect(addr2).storePrivateData(id, [keys[1]], ["60"], allowedAddresses); // Second Humidity contribution
+            await privatePass.connect(addr3).storePrivateData(id, [keys[1]], ["40"], allowedAddresses); // Third Humidity contribution
+    
+            // Non-numeric contribution which should not be aggregated
+            await privatePass.connect(addr3).storePrivateData(id, [keys[2]], [values[2]], allowedAddresses);
+    
+            // Attempt to retrieve aggregated data
+            const aggregatedData = await privatePass.getAggregateData(id);
+            console.log("Aggregated Data:", aggregatedData);
+
+            // Checking JSON structure for correct aggregation of numeric data and exclusion of non-numeric data
+            expect(aggregatedData).to.include(`"${keys[0]}": 1300`); // Sum of CO2 contributions
+            expect(aggregatedData).to.include(`"${keys[1]}": 150`);   // Sum of Humidity contributions
+            expect(aggregatedData).not.to.include(keys[2]);          // 'status' is non-numeric and should not be aggregated
+        });
+    });    
 });

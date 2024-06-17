@@ -15,10 +15,10 @@ contract PrivatePass {
     }
 
     mapping(string => Entry[]) private dataEntries;
-    mapping(string => mapping(string => AggregatedData)) private aggregatedData;
+    mapping(string => mapping(string => AggregatedData)) private aggregateByKey;
 
     event DataStored(string id, address indexed user, string key);
-    event AggregateUpdated(string id, string key, string aggregateJson);
+    event AggregateUpdated(string id, string aggregateJson);
     event AccessGranted(string id, address indexed user, address accessor);
     event AccessRevoked(string id, address indexed user, address accessor);
 
@@ -39,20 +39,18 @@ contract PrivatePass {
         if (entryExists) {
             entry = dataEntries[_id][entryIndex];
         } else {
-            entry = dataEntries[_id].push();
-            entry.owner = msg.sender;
+            // First, push a new empty Entry struct to the array
+            dataEntries[_id].push();
+            entry = dataEntries[_id][dataEntries[_id].length - 1];
 
-            // Initialize the access list, ensuring that the sender is always included
-            bool senderIncluded = false;
-            for (uint i = 0; i < _allowedAddresses.length; i++) {
-                entry.accessList[_allowedAddresses[i]] = true;
-                if (_allowedAddresses[i] == msg.sender) {
-                    senderIncluded = true;
+            // Then, initialize the properties
+            entry.owner = msg.sender;
+            if (_allowedAddresses.length == 0) {
+                entry.accessList[msg.sender] = true; // Ensure the sender is always included if no allowed addresses are provided
+            } else {
+                for (uint i = 0; i < _allowedAddresses.length; i++) {
+                    entry.accessList[_allowedAddresses[i]] = true;
                 }
-            }
-            // If the sender is not included in the provided addresses, add them
-            if (!senderIncluded) {
-                entry.accessList[msg.sender] = true;
             }
         }
 
@@ -68,14 +66,17 @@ contract PrivatePass {
             // Check if the value is numeric and handle aggregation if it is
             (uint256 numericValue, bool isNumeric) = tryParseUint(_values[i]);
             if (isNumeric) {
-                AggregatedData storage aggData = aggregatedData[_keys[i]][_id];
+                AggregatedData storage aggData = aggregateByKey[_id][_keys[i]];
                 aggData.sum += numericValue;
                 aggData.count += 1;
-                string memory aggregateJson = generateAggregateJson(_keys[i], _id);
-                emit AggregateUpdated(_id, _keys[i], aggregateJson);
             }
         }
+
+        // Emit aggregate data update after processing all keys
+        string memory aggregateJson = generateAggregateJson(_id);
+        emit AggregateUpdated(_id, aggregateJson);
     }
+
 
     function grantAccess(string memory _id, address _newAccessor) public {
         for (uint i = 0; i < dataEntries[_id].length; i++) {
@@ -99,17 +100,47 @@ contract PrivatePass {
         revert("Only the owner can revoke access");
     }
 
-    function getAggregateData(string memory _id, string memory _key) public view returns (string memory) {
-        return generateAggregateJson(_key, _id);
+    function getAggregateData(string memory _id) public view returns (string memory) {
+        return generateAggregateJson(_id);
     }
 
-    function generateAggregateJson(string memory _key, string memory _id) internal view returns (string memory) {
-        AggregatedData memory aggData = aggregatedData[_key][_id];
-        if (aggData.count >= 3) {
-            return string(abi.encodePacked("{\"", _key, "\": ", uint2str(aggData.sum), "}"));
-        } else {
-            return "{}";
+    function generateAggregateJson(string memory _id) internal view returns (string memory) {
+        bool first = true;
+        string memory result = "{";
+        string[] memory processedKeys = new string[](dataEntries[_id].length * 10); // Oversized array to accommodate keys
+        uint processedCount = 0;
+
+        for (uint i = 0; i < dataEntries[_id].length; i++) {
+            Entry storage entry = dataEntries[_id][i];
+            for (uint j = 0; j < entry.keys.length; j++) {
+                string memory key = entry.keys[j];
+                if (isKeyProcessed(processedKeys, processedCount, key)) {
+                    continue; // Skip this key if it has already been processed
+                }
+                processedKeys[processedCount] = key;
+                processedCount++;
+
+                AggregatedData storage aggData = aggregateByKey[_id][key];
+                if (aggData.count >= 3) {
+                    if (!first) {
+                        result = string(abi.encodePacked(result, ", "));
+                    }
+                    result = string(abi.encodePacked(result, "\"", key, "\": ", uint2str(aggData.sum)));
+                    first = false;
+                }
+            }
         }
+        result = string(abi.encodePacked(result, "}"));
+        return result;
+    }
+
+    function isKeyProcessed(string[] memory processedKeys, uint processedCount, string memory key) internal pure returns (bool) {
+        for (uint i = 0; i < processedCount; i++) {
+            if (keccak256(abi.encodePacked(processedKeys[i])) == keccak256(abi.encodePacked(key))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function getPrivateData(string memory _id) public view returns (string memory) {

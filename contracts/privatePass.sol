@@ -20,6 +20,7 @@ contract PrivatePass {
     event DataStored(string id, address indexed user, string key);
     event AggregateUpdated(string id, string key, string aggregateJson);
     event AccessGranted(string id, address indexed user, address accessor);
+    event AccessRevoked(string id, address indexed user, address accessor);
 
     function storePrivateData(string memory _id, string[] memory _keys, string[] memory _values, address[] memory _allowedAddresses) public {
         Entry storage entry;
@@ -74,6 +75,28 @@ contract PrivatePass {
                 emit AggregateUpdated(_id, _keys[i], aggregateJson);
             }
         }
+    }
+
+    function grantAccess(string memory _id, address _newAccessor) public {
+        for (uint i = 0; i < dataEntries[_id].length; i++) {
+            if (dataEntries[_id][i].owner == msg.sender) {
+                dataEntries[_id][i].accessList[_newAccessor] = true;
+                emit AccessGranted(_id, msg.sender, _newAccessor);
+                return;
+            }
+        }
+        revert("Only the owner can grant access");
+    }
+
+    function revokeAccess(string memory _id, address _accessor) public {
+        for (uint i = 0; i < dataEntries[_id].length; i++) {
+            if (dataEntries[_id][i].owner == msg.sender) {
+                dataEntries[_id][i].accessList[_accessor] = false;
+                emit AccessRevoked(_id, msg.sender, _accessor);
+                return;
+            }
+        }
+        revert("Only the owner can revoke access");
     }
 
     function getAggregateData(string memory _id, string memory _key) public view returns (string memory) {

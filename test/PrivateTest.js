@@ -85,7 +85,7 @@ describe("PrivatePass Contract", function () {
     it("should handle multiple types of data for a single user correctly", async function () {
         const id = "multi-type-123";
         const keys = ["dataType1", "dataType2"];
-        const values = ["value1", 2];
+        const values = ["value1", "2"];
         const allowedAddresses = [addr1.address];
 
         // User 1 stores multiple data types
@@ -94,7 +94,7 @@ describe("PrivatePass Contract", function () {
         // Retrieve public data by any authorized user
         const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
         expect(retrievedData).to.include("value1");
-        expect(retrievedData).to.include(2);
+        expect(retrievedData).to.include("2");
     });
 
     it("should append data correctly under the same ID by multiple users with proper access control", async function () {
@@ -185,4 +185,103 @@ describe("PrivatePass Contract", function () {
         // Unauthorized user tries to access
         await expect(privatePass.connect(addr2).getPrivateData("existent")).to.be.rejectedWith("Access denied or ID not found");
     });
+
+    it("should allow granting access to a new address after data has been stored", async function () {
+        const id = "access-test";
+        const keys = ["dataKey"];
+        const values = ["dataValue"];
+        const initialAllowedAddresses = [addr1.address];
+    
+        // Owner stores private data
+        await privatePass.connect(owner).storePrivateData(id, keys, values, initialAllowedAddresses);
+    
+        // Grant access to a new address
+        const newAllowedAddress = addr2.address;
+        await privatePass.connect(owner).grantAccess(id, newAllowedAddress);
+    
+        // New address should now have access
+        const dataByNewAddress = await privatePass.connect(addr2).getPrivateData(id);
+        expect(dataByNewAddress).to.include("dataValue");
+    });
+
+    it("should allow revoking access from an address", async function () {
+        const id = "revoke-test";
+        const keys = ["dataKey"];
+        const values = ["dataValue"];
+        const allowedAddresses = [addr1.address, addr2.address];
+    
+        // Owner stores private data
+        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
+    
+        // Revoke access from addr2
+        await privatePass.connect(owner).revokeAccess(id, addr2.address);
+    
+        // addr2 should no longer have access
+        await expect(privatePass.connect(addr2).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
+    });
+
+    it("should handle storing and retrieving data with empty keys and values", async function () {
+        const id = "empty-key-value-test";
+        const keys = [""];
+        const values = [""];
+    
+        // Owner stores private data with empty key and value
+        await privatePass.connect(owner).storePrivateData(id, keys, values, [addr1.address]);
+    
+        // Retrieve data
+        const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
+        expect(retrievedData).to.include("\"\": \"\"");
+    });
+
+    it("should handle storing and retrieving a large number of key-value pairs", async function () {
+        const id = "large-data-set";
+        const keys = [];
+        const values = [];
+        const numEntries = 100;
+    
+        for (let i = 0; i < numEntries; i++) {
+            keys.push(`key${i}`);
+            values.push(`value${i}`);
+        }
+    
+        // Owner stores a large number of key-value pairs
+        await privatePass.connect(owner).storePrivateData(id, keys, values, [addr1.address]);
+    
+        // Retrieve data
+        const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
+        for (let i = 0; i < numEntries; i++) {
+            expect(retrievedData).to.include(`"key${i}": "value${i}"`);
+        }
+    });  
+    
+    it("should handle numeric and non-numeric data aggregation correctly", async function () {
+        const id = "aggregation-test";
+        const numericKey = "numericKey";
+        const nonNumericKey = "nonNumericKey";
+        const numericValues = ["100", "200", "300"];
+        const nonNumericValues = ["value1", "value2"];
+        const allowedAddresses = [addr1.address];
+    
+        // Store numeric data
+        await privatePass.connect(owner).storePrivateData(id, [numericKey], [numericValues[0]], allowedAddresses);
+        await privatePass.connect(addr1).storePrivateData(id, [numericKey], [numericValues[1]], allowedAddresses);
+        await privatePass.connect(addr2).storePrivateData(id, [numericKey], [numericValues[2]], allowedAddresses);
+    
+        // Store non-numeric data
+        await privatePass.connect(owner).storePrivateData(id, [nonNumericKey], [nonNumericValues[0]], allowedAddresses);
+        await privatePass.connect(addr1).storePrivateData(id, [nonNumericKey], [nonNumericValues[1]], allowedAddresses);
+    
+        // Retrieve and verify aggregated data
+        const aggregatedData = await privatePass.getAggregateData(id, numericKey);
+        const totalSum = parseInt(numericValues[0]) + parseInt(numericValues[1]) + parseInt(numericValues[2]);
+        const expectedAggregatedData = `{"${numericKey}": ${totalSum}}`;
+    
+        expect(aggregatedData).to.equal(expectedAggregatedData);
+    
+        // Non-numeric data should not be aggregated
+        const nonAggregatedData = await privatePass.getAggregateData(id, nonNumericKey);
+        expect(nonAggregatedData).to.equal("{}");
+    });
+    
+    
 });

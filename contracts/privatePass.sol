@@ -79,7 +79,6 @@ contract PrivatePass {
         emit AggregateUpdated(_id, aggregateJson);
     }
 
-
     function grantAccess(string memory _id, address _newAccessor) public {
         for (uint i = 0; i < dataEntries[_id].length; i++) {
             if (dataEntries[_id][i].owner == msg.sender) {

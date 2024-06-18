@@ -74,6 +74,10 @@ contract PublicPass {
         return dataJson;
     }
 
+    function storeAggregateData(string memory _id, string memory _aggregateJson) public {
+        emit PublicDataStored(_id, msg.sender, _aggregateJson);
+    }
+
     // Helper functions to handle address to string conversion
     function toAsciiString(address x) internal pure returns (string memory) {
         bytes memory s = new bytes(40);

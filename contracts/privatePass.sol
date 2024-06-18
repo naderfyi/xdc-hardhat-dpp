@@ -21,6 +21,8 @@ contract PrivatePass {
     event AggregateUpdated(string id, string aggregateJson);
     event AccessGranted(string id, address indexed user, address accessor);
     event AccessRevoked(string id, address indexed user, address accessor);
+    
+    event AggregateDataReady(string id, string aggregateJson);
 
     function storePrivateData(string memory _id, string[] memory _keys, string[] memory _values, address[] memory _allowedAddresses) public {
         Entry storage entry;
@@ -104,6 +106,11 @@ contract PrivatePass {
         return generateAggregateJson(_id);
     }
 
+    function getAggregateDataAndEmitEvent(string memory _id) public {
+        string memory aggregateJson = generateAggregateJson(_id);
+        emit AggregateDataReady(_id, aggregateJson);
+    }
+    
     function generateAggregateJson(string memory _id) internal view returns (string memory) {
         bool first = true;
         string memory result = "{";

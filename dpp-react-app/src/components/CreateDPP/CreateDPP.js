@@ -73,42 +73,76 @@ const CreateDPP = ({ signer }) => {
     console.log(`Updated address at ${entryIndex}, ${addressIndex}: ${value}`);
   };
 
+  async function validateNetwork(expectedChainId) {
+    const currentNetwork = await signer.provider.getNetwork();
+    const currentChainIdInt = parseInt(currentNetwork.chainId);
+    const expectedChainIdInt = parseInt(expectedChainId);
+  
+    console.log(`Current network ID: ${currentChainIdInt}, Expected network ID: ${expectedChainIdInt}`);
+    if (currentChainIdInt !== expectedChainIdInt) {
+      throw new Error(`Network mismatch: expected ${expectedChainIdInt}, but got ${currentChainIdInt}`);
+    }
+  }
+
+  async function switchAndRefreshNetwork(targetNetwork) {
+    await switchNetwork(targetNetwork);
+    await refreshSigner(); // Ensure the signer is updated
+  }
+  
+  // Helper function to refresh the signer
+  async function refreshSigner() {
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    signer = provider.getSigner();
+  }  
+  
   const handleCreateDPP = async () => {
     console.log('Preparing to store data...');
     const privateEntries = entries.filter(entry => entry.type === 'private');
     const publicEntries = entries.filter(entry => entry.type === 'public');
-
+  
     try {
       if (privateEntries.length > 0) {
-        const privateKeys = privateEntries.map(entry => entry.key);
-        const privateValues = privateEntries.map(entry => entry.value);
-        const allowedAddresses = privateEntries.map(entry => entry.allowedAddresses.filter(addr => addr.trim() !== ''));
-        const privatePassContract = new ethers.Contract(config.PRIVATE_PASS_ADDRESS, PrivatePass.abi, signer);
-        setTxStatus('Sending private transaction...');
-        const txResponse = await privatePassContract.storePrivateData(id, privateKeys, privateValues, allowedAddresses.flat());
-        await txResponse.wait();
-        setTxStatus('Private data stored successfully!');
-        setTxHash(txResponse.hash);
-        console.log('Private transaction hash:', txResponse.hash);
+        await switchAndRefreshNetwork('private');
+        await validateNetwork(config.SUBNET_CHAIN_ID);
+        // Perform private transactions
+        await handlePrivateTransactions(privateEntries);
       }
-
+  
       if (publicEntries.length > 0) {
-        const publicKeys = publicEntries.map(entry => entry.key);
-        const publicValues = publicEntries.map(entry => entry.value);
-        const publicPassContract = new ethers.Contract(config.PUBLIC_PASS_ADDRESS, PublicPass.abi, signer);
-        setTxStatus('Sending public transaction...');
-        const txResponse = await publicPassContract.storePublicData(id, publicKeys, publicValues);
-        await txResponse.wait();
-        setTxStatus('Public data stored successfully!');
-        setTxHash(txResponse.hash);
-        console.log('Public transaction hash:', txResponse.hash);
+        await switchAndRefreshNetwork('public');
+        await validateNetwork(config.APOTHEM_CHAIN_ID);
+        // Perform public transactions
+        await handlePublicTransactions(publicEntries);
       }
     } catch (error) {
       console.error('Transaction failed:', error);
-      setTxStatus('Transaction failed');
+      setTxStatus(`Transaction failed: ${error.message}`);
     }
   };
-
+  
+  async function handlePrivateTransactions(entries) {
+    const keys = entries.map(entry => entry.key);
+    const values = entries.map(entry => entry.value);
+    const addresses = entries.map(entry => entry.allowedAddresses.filter(addr => addr.trim() !== ''));
+    const contract = new ethers.Contract(config.PRIVATE_PASS_ADDRESS, PrivatePass.abi, signer);
+    const txResponse = await contract.storePrivateData(id, keys, values, addresses.flat());
+    await txResponse.wait();
+    setTxStatus('Private data stored successfully!');
+    setTxHash(txResponse.hash);
+    console.log('Private transaction hash:', txResponse.hash);
+  }
+  
+  async function handlePublicTransactions(entries) {
+    const keys = entries.map(entry => entry.key);
+    const values = entries.map(entry => entry.value);
+    const contract = new ethers.Contract(config.PUBLIC_PASS_ADDRESS, PublicPass.abi, signer);
+    const txResponse = await contract.storePublicData(id, keys, values);
+    await txResponse.wait();
+    setTxStatus('Public data stored successfully!');
+    setTxHash(txResponse.hash);
+    console.log('Public transaction hash:', txResponse.hash);
+  }
+  
   return (
     <div>
       <h2>Create Digital Product Passport</h2>

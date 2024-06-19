@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import PrivatePass from '../../contracts/PrivatePass.json';
 import PublicPass from '../../contracts/PublicPass.json';
 import { config } from '../../config';
+import { switchNetwork } from '../../utils/switchNetwork'; // Adjust the path as necessary
 
 const CreateDPP = ({ signer }) => {
   const [id, setId] = useState('');

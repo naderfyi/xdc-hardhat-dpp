@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Web3Provider } from '@ethersproject/providers';
+import { switchNetwork as importedSwitchNetwork } from '../../utils/switchNetwork';
 
-function ConnectWallet({ setProvider }) {
+function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
   const [walletConnected, setWalletConnected] = useState(false);
 
-  const handleAccountsChanged = useCallback((accounts) => {
+  const handleAccountsChanged = useCallback(async (accounts) => {
     if (accounts.length === 0) {
       console.log('Please connect to MetaMask.');
       setWalletConnected(false);
@@ -13,12 +14,15 @@ function ConnectWallet({ setProvider }) {
       const provider = new Web3Provider(window.ethereum);
       setProvider(provider);
       setWalletConnected(true);
+      await switchNetwork(); // Ensure the network is switched upon account change
     }
-  }, [setProvider]);
+  }, [setProvider, switchNetwork]);
 
-  const handleChainChanged = useCallback(() => {
-    window.location.reload(); // Recommended by MetaMask to handle chain changes robustly
-  }, []);
+  const handleChainChanged = useCallback((chainId) => {
+    console.log(`Chain changed to ${chainId}`);
+    const provider = new Web3Provider(window.ethereum);
+    setProvider(provider); // Update provider whenever the chain changes
+  }, [setProvider]);
 
   const handleDisconnect = useCallback((error) => {
     console.error('Disconnected:', error);
@@ -43,17 +47,18 @@ function ConnectWallet({ setProvider }) {
   }, [handleAccountsChanged, handleChainChanged, handleDisconnect]);
 
   const connectWalletHandler = async () => {
-    if (window.ethereum) {
-      try {
-        const provider = new Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []); // Request account access
-        setProvider(provider);
-        setWalletConnected(true);
-      } catch (error) {
-        console.error('Failed to connect wallet:', error);
-      }
-    } else {
+    if (!window.ethereum) {
       alert('Please install MetaMask!');
+      return;
+    }
+    try {
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const provider = new Web3Provider(window.ethereum);
+      setProvider(provider);
+      setWalletConnected(true);
+      await switchNetwork(); // Ensure the correct network upon connecting
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
     }
   };
 

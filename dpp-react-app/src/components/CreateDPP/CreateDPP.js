@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import PrivatePass from '../../contracts/PrivatePass.json';
 import PublicPass from '../../contracts/PublicPass.json';
 import { config } from '../../config';
-import { switchNetwork } from '../../utils/switchNetwork'; // Adjust the path as necessary
+import { switchNetwork } from '../../utils/switchNetwork';
 
 const CreateDPP = ({ signer }) => {
   const [id, setId] = useState('');
@@ -11,7 +11,7 @@ const CreateDPP = ({ signer }) => {
     { key: '', value: '', type: 'public', allowedAddresses: [] }
   ]);
   const [txStatus, setTxStatus] = useState('');
-  const [txHash, setTxHash] = useState('');
+  const [txHashes, setTxHashes] = useState([]);
 
   const handleAddEntry = () => {
     setEntries([...entries, { key: '', value: '', type: 'public', allowedAddresses: [] }]);
@@ -105,15 +105,19 @@ const CreateDPP = ({ signer }) => {
         await switchAndRefreshNetwork('private');
         await validateNetwork(config.SUBNET_CHAIN_ID);
         // Perform private transactions
-        await handlePrivateTransactions(privateEntries);
+        const txHash = await handlePrivateTransactions(privateEntries);
+        setTxHashes(prevHashes => [...prevHashes, { hash: txHash, type: 'private' }]);
       }
   
       if (publicEntries.length > 0) {
         await switchAndRefreshNetwork('public');
         await validateNetwork(config.APOTHEM_CHAIN_ID);
         // Perform public transactions
-        await handlePublicTransactions(publicEntries);
+        const txHash = await handlePublicTransactions(publicEntries);
+        setTxHashes(prevHashes => [...prevHashes, { hash: txHash, type: 'public' }]);
       }
+  
+      setTxStatus('Data stored successfully!');
     } catch (error) {
       console.error('Transaction failed:', error);
       setTxStatus(`Transaction failed: ${error.message}`);
@@ -128,10 +132,9 @@ const CreateDPP = ({ signer }) => {
     const txResponse = await contract.storePrivateData(id, keys, values, addresses.flat());
     await txResponse.wait();
     setTxStatus('Private data stored successfully!');
-    setTxHash(txResponse.hash);
-    console.log('Private transaction hash:', txResponse.hash);
+    return txResponse.hash;
   }
-  
+
   async function handlePublicTransactions(entries) {
     const keys = entries.map(entry => entry.key);
     const values = entries.map(entry => entry.value);
@@ -139,10 +142,9 @@ const CreateDPP = ({ signer }) => {
     const txResponse = await contract.storePublicData(id, keys, values);
     await txResponse.wait();
     setTxStatus('Public data stored successfully!');
-    setTxHash(txResponse.hash);
-    console.log('Public transaction hash:', txResponse.hash);
+    return txResponse.hash;
   }
-  
+
   return (
     <div>
       <h2>Create Digital Product Passport</h2>
@@ -175,9 +177,15 @@ const CreateDPP = ({ signer }) => {
       <button onClick={handleAddEntry}>Add Entry</button>
       <button onClick={handleCreateDPP}>Create DPP</button>
       <p>{txStatus}</p>
-      {txHash && (
-        <p>Transaction Hash: <a href={`https://explorer.apothem.network/tx/${txHash}`} target="_blank" rel="noopener noreferrer">{txHash}</a></p>
-      )}
+      {txHashes.map((tx, index) => (
+        <p key={index}>
+          {tx.type === 'private' ? 'Private' : 'Public'} Transaction Hash: 
+          <a href={tx.type === 'private' ? `http://3.67.93.162:5000/checker/${tx.hash}` : `https://explorer.apothem.network/tx/${tx.hash}`} 
+            target="_blank" rel="noopener noreferrer">
+            {tx.hash}
+          </a>
+        </p>
+      ))}
     </div>
   );
 };

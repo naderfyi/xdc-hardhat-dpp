@@ -109,7 +109,7 @@ contract PrivatePass {
         string memory aggregateJson = generateAggregateJson(_id);
         emit AggregateDataReady(_id, aggregateJson);
     }
-    
+
     function generateAggregateJson(string memory _id) internal view returns (string memory) {
         bool first = true;
         string memory result = "{";

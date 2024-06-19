@@ -1,9 +1,11 @@
+// src/components/CreateDPP/CreateDPP.js
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import PrivatePass from '../../contracts/PrivatePass.json';
 import PublicPass from '../../contracts/PublicPass.json';
 import { config } from '../../config';
 import { switchNetwork } from '../../utils/switchNetwork';
+import './CreateDPP.css';
 
 const CreateDPP = ({ signer }) => {
   const [id, setId] = useState('');

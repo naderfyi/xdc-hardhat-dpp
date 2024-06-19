@@ -3,12 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import ConnectWallet from './components/ConnectWallet/ConnectWallet';
 import CreateDPP from './components/CreateDPP/CreateDPP';
 import ViewDPP from './components/ViewDPP/ViewDPP';
+import './App.css';
 
 function App() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
 
-  // Update signer whenever provider changes
   useEffect(() => {
     if (provider) {
       setSigner(provider.getSigner());
@@ -29,15 +29,15 @@ function App() {
 
 function Header({ provider, handleProvider }) {
   return (
-    <header>
-      <h1>Digital Product Passport Application</h1>
-      <nav>
-        <ul>
-          <li><Link to="/">Home</Link></li>
+    <header className="header">
+      <h1 className="title">Digital Product Passport</h1>
+      <nav className="nav">
+        <ul className="nav-list">
+          <li className="nav-item"><Link to="/">Home</Link></li>
           {provider && (
             <>
-              <li><Link to="/create-dpp">Create DPP</Link></li>
-              <li><Link to="/view-dpp">View DPP</Link></li>
+              <li className="nav-item"><Link to="/create-dpp">Create DPP</Link></li>
+              <li className="nav-item"><Link to="/view-dpp">View DPP</Link></li>
             </>
           )}
         </ul>
@@ -49,7 +49,7 @@ function Header({ provider, handleProvider }) {
 
 function MainContent({ provider, signer }) {
   return (
-    <main>
+    <main className="main-content">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/create-dpp" element={signer ? <CreateDPP signer={signer} /> : <NoWalletConnected />} />
@@ -61,8 +61,8 @@ function MainContent({ provider, signer }) {
 
 function Home() {
   return (
-    <div>
-      <h2>Welcome to the Digital Product Passport Application</h2>
+    <div className="home">
+      <h2>Welcome to the Digital Product Passport</h2>
       <p>Connect your wallet to get started.</p>
     </div>
   );
@@ -70,7 +70,7 @@ function Home() {
 
 function NoWalletConnected() {
   return (
-    <div>
+    <div className="no-wallet">
       <h3>No Wallet Connected</h3>
       <p>Please connect your wallet to access this feature.</p>
     </div>

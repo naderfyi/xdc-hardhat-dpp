@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Web3Provider } from '@ethersproject/providers';
 import { switchNetwork as importedSwitchNetwork } from '../../utils/switchNetwork';
+import './ConnectWallet.css';
 
 function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
   const [walletConnected, setWalletConnected] = useState(false);
@@ -75,14 +76,14 @@ function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
   };
 
   return (
-    <div>
+    <div className="connect-wallet">
       {walletConnected ? (
         <>
-          <p>Wallet Connected</p>
-          <button onClick={disconnectWalletHandler}>Disconnect Wallet</button>
+          <p className="status">Wallet Connected</p>
+          <button className="button disconnect" onClick={disconnectWalletHandler}>Disconnect Wallet</button>
         </>
       ) : (
-        <button onClick={connectWalletHandler}>Connect Wallet</button>
+        <button className="button connect" onClick={connectWalletHandler}>Connect Wallet</button>
       )}
     </div>
   );

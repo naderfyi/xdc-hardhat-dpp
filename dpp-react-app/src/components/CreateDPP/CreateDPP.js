@@ -1,11 +1,11 @@
-// src/components/CreateDPP/CreateDPP.js
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
+import { Box, Button, Input, VStack, FormControl, FormLabel, Select, Flex, Link, useToast, Text } from '@chakra-ui/react';
 import PrivatePass from '../../contracts/PrivatePass.json';
 import PublicPass from '../../contracts/PublicPass.json';
 import { config } from '../../config';
 import { switchNetwork } from '../../utils/switchNetwork';
-import './CreateDPP.css';
+import { IoClose } from 'react-icons/io5';
 
 const CreateDPP = ({ signer }) => {
   const [id, setId] = useState('');
@@ -14,6 +14,7 @@ const CreateDPP = ({ signer }) => {
   ]);
   const [txStatus, setTxStatus] = useState('');
   const [txHashes, setTxHashes] = useState([]);
+  const toast = useToast();
 
   const handleAddEntry = () => {
     setEntries([...entries, { key: '', value: '', type: 'public', allowedAddresses: [] }]);
@@ -120,9 +121,23 @@ const CreateDPP = ({ signer }) => {
       }
   
       setTxStatus('Data stored successfully!');
+      toast({
+        title: "Success",
+        description: "Data has been stored successfully!",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error('Transaction failed:', error);
       setTxStatus(`Transaction failed: ${error.message}`);
+      toast({
+        title: "Transaction failed",
+        description: error.message,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     }
   };
   
@@ -148,47 +163,52 @@ const CreateDPP = ({ signer }) => {
   }
 
   return (
-    <div>
-      <h2>Create Digital Product Passport</h2>
-      <input type="text" value={id} onChange={e => setId(e.target.value)} placeholder="DPP ID" />
-      {entries.map((entry, index) => (
-        <div key={index}>
-          <input type="text" value={entry.key} onChange={e => handleEntryChange(index, 'key', e.target.value)} placeholder="Key" />
-          <input type="text" value={entry.value} onChange={e => handleEntryChange(index, 'value', e.target.value)} placeholder="Value" />
-          <select value={entry.type} onChange={e => handleEntryChange(index, 'type', e.target.value)}>
-            <option value="public">Public</option>
-            <option value="private">Private</option>
-          </select>
-          <button onClick={() => handleRemoveEntry(index)}>X</button>
-          {entry.type === 'private' && entry.allowedAddresses.map((address, addrIdx) => (
-            <div key={addrIdx}>
-              <input
-                type="text"
-                value={address}
-                onChange={e => handleAddressChange(index, addrIdx, e.target.value)}
-                placeholder="Allowed Address"
-              />
-              <button onClick={() => handleRemoveAddress(index, addrIdx)}>X</button>
-            </div>
-          ))}
-          {entry.type === 'private' && (
-            <button onClick={() => handleAddAddress(index)}>Add Address</button>
-          )}
-        </div>
-      ))}
-      <button onClick={handleAddEntry}>Add Entry</button>
-      <button onClick={handleCreateDPP}>Create DPP</button>
-      <p>{txStatus}</p>
-      {txHashes.map((tx, index) => (
-        <p key={index}>
-          {tx.type === 'private' ? 'Private' : 'Public'} Transaction Hash: 
-          <a href={tx.type === 'private' ? `http://3.67.93.162:5000/checker/${tx.hash}` : `https://explorer.apothem.network/tx/${tx.hash}`} 
-            target="_blank" rel="noopener noreferrer">
-            {tx.hash}
-          </a>
-        </p>
-      ))}
-    </div>
+    <VStack spacing={4} align="stretch" m={5}>
+      <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+        <FormControl>
+          <FormLabel htmlFor="dpp-id">DPP ID</FormLabel>
+          <Input id="dpp-id" value={id} onChange={e => setId(e.target.value)} placeholder="Enter DPP ID" size="lg" />
+        </FormControl>
+        {entries.map((entry, index) => (
+          <Box key={index} mt={4}>
+            <Flex>
+              <Input placeholder="Key" value={entry.key} onChange={e => handleEntryChange(index, 'key', e.target.value)} />
+              <Input ml={2} placeholder="Value" value={entry.value} onChange={e => handleEntryChange(index, 'value', e.target.value)} />
+              <Select ml={2} value={entry.type} onChange={e => handleEntryChange(index, 'type', e.target.value)}>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </Select>
+              {entries.length > 1 && (
+                <Button ml={2} colorScheme="red" onClick={() => handleRemoveEntry(index)} size="md" iconSpacing={1}>
+                  <IoClose size="3.5em" />
+                </Button>
+              )}
+            </Flex>
+            {entry.type === 'private' && entry.allowedAddresses.map((address, addrIdx) => (
+              <Flex key={addrIdx} mt={2}>
+                <Input placeholder="Allowed Address" value={address} onChange={e => handleAddressChange(index, addrIdx, e.target.value)} />
+                <Button ml={2} colorScheme="red" onClick={() => handleRemoveAddress(index, addrIdx)} size="md" iconSpacing={1}>
+                  <IoClose size="3.5em" />
+                </Button>
+              </Flex>
+            ))}
+            {entry.type === 'private' && (
+              <Button mt={2} onClick={() => handleAddAddress(index)}>Add Address</Button>
+            )}
+          </Box>
+        ))}
+        <Flex mt={4} gap="10px">
+          <Button colorScheme="teal" onClick={handleAddEntry}>Add Entry</Button>
+          <Button colorScheme="blue" onClick={handleCreateDPP}>Create DPP</Button>
+        </Flex>
+        {txStatus && <Text mt={4} color="green.500">{txStatus}</Text>}
+        {txHashes.map((tx, index) => (
+          <Link key={index} href={tx.type === 'private' ? `http://3.67.93.162:5000/checker/${tx.hash}` : `https://explorer.apothem.network/tx/${tx.hash}`} isExternal>
+            <Text color="blue.500">{tx.type} Transaction Hash: {tx.hash}</Text>
+          </Link>
+        ))}
+      </Box>
+    </VStack>
   );
 };
 

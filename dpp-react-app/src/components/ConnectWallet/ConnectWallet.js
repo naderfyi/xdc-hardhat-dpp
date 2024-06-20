@@ -1,14 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Web3Provider } from '@ethersproject/providers';
+import { Button, useToast, Flex, Text } from '@chakra-ui/react';
 import { switchNetwork as importedSwitchNetwork } from '../../utils/switchNetwork';
-import './ConnectWallet.css';
 
 function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
   const [walletConnected, setWalletConnected] = useState(false);
+  const toast = useToast();
 
   const handleAccountsChanged = useCallback(async (accounts) => {
     if (accounts.length === 0) {
-      console.log('Please connect to MetaMask.');
+      toast({
+        title: 'Wallet disconnected',
+        description: "Please connect to MetaMask.",
+        status: 'warning',
+        duration: 5000,
+        isClosable: true,
+      });
       setWalletConnected(false);
       setProvider(null);
     } else {
@@ -17,19 +24,32 @@ function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
       setWalletConnected(true);
       await switchNetwork(); // Ensure the network is switched upon account change
     }
-  }, [setProvider, switchNetwork]);
+  }, [setProvider, switchNetwork, toast]);
 
   const handleChainChanged = useCallback((chainId) => {
     console.log(`Chain changed to ${chainId}`);
     const provider = new Web3Provider(window.ethereum);
     setProvider(provider); // Update provider whenever the chain changes
-  }, [setProvider]);
+    toast({
+      title: 'Network Changed',
+      description: `Chain changed to ${chainId}`,
+      status: 'info',
+      duration: 5000,
+      isClosable: true,
+    });
+  }, [setProvider, toast]);
 
   const handleDisconnect = useCallback((error) => {
-    console.error('Disconnected:', error);
+    toast({
+      title: 'Disconnected',
+      description: `Error: ${error}`,
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
     setWalletConnected(false);
     setProvider(null);
-  }, [setProvider]);
+  }, [setProvider, toast]);
 
   useEffect(() => {
     if (window.ethereum) {
@@ -49,7 +69,13 @@ function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
 
   const connectWalletHandler = async () => {
     if (!window.ethereum) {
-      alert('Please install MetaMask!');
+      toast({
+        title: 'MetaMask Required',
+        description: 'Please install MetaMask to connect.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
       return;
     }
     try {
@@ -76,16 +102,16 @@ function ConnectWallet({ setProvider, switchNetwork = importedSwitchNetwork }) {
   };
 
   return (
-    <div className="connect-wallet">
+    <Flex direction="column" align="center" justify="center" mt="4">
       {walletConnected ? (
         <>
-          <p className="status">Wallet Connected</p>
-          <button className="button disconnect" onClick={disconnectWalletHandler}>Disconnect Wallet</button>
+          <Text mb="2">Wallet Connected</Text>
+          <Button colorScheme="red" onClick={disconnectWalletHandler}>Disconnect Wallet</Button>
         </>
       ) : (
-        <button className="button connect" onClick={connectWalletHandler}>Connect Wallet</button>
+        <Button colorScheme="teal" onClick={connectWalletHandler}>Connect Wallet</Button>
       )}
-    </div>
+    </Flex>
   );
 }
 

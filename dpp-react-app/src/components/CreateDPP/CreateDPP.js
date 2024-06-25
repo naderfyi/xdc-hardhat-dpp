@@ -188,7 +188,7 @@ const CreateDPP = ({ signer }) => {
               <Flex key={addrIdx} mt={2}>
                 <Input placeholder="Allowed Address" value={address} onChange={e => handleAddressChange(index, addrIdx, e.target.value)} />
                 <Button ml={2} colorScheme="red" onClick={() => handleRemoveAddress(index, addrIdx)} size="md" iconSpacing={1}>
-                  <IoClose size="3.5em" />
+                  <IoClose size="1em" />
                 </Button>
               </Flex>
             ))}

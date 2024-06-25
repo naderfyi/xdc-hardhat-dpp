@@ -41,11 +41,12 @@ const ViewDPP = ({ signer }) => {
       console.error(`Error fetching data:`, err);
       dataSetter('Data not found or ID not found.');
       setError('Data not found or ID not found.');
+      setTimeout(() => setError(''), 2000); // Error message disappears after 5 seconds
       toast({
         title: "Error fetching data",
         description: "Data not found or ID not found.",
         status: "error",
-        duration: 5000,
+        duration: 2000,
         isClosable: true,
       });
     }
@@ -53,6 +54,8 @@ const ViewDPP = ({ signer }) => {
 
   const handleFetchData = async () => {
     setError('');
+    setPrivateData('');
+    setPublicData('');
     try {
       await switchAndRefreshNetwork('private');
       await validateNetwork(config.SUBNET_CHAIN_ID);
@@ -67,11 +70,12 @@ const ViewDPP = ({ signer }) => {
     } catch (error) {
       console.error('Network or fetching error:', error);
       setError(error.message);
+      setTimeout(() => setError(''), 2000); // Error message disappears after 2 seconds
       toast({
         title: "Network or fetching error",
         description: error.message,
         status: "error",
-        duration: 5000,
+        duration: 2000,
         isClosable: true,
       });
     }
@@ -84,7 +88,11 @@ const ViewDPP = ({ signer }) => {
         <Input
           placeholder="DPP ID"
           value={id}
-          onChange={e => setId(e.target.value)}
+          onChange={e => {
+            setId(e.target.value);
+            setPrivateData(''); // Clearing the data fields when a new ID is inputted
+            setPublicData('');
+          }}
           size="lg"
         />
         <Button colorScheme="blue" onClick={handleFetchData} mt="4">Fetch Data</Button>

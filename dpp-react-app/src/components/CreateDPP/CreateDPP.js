@@ -125,7 +125,7 @@ const CreateDPP = ({ signer }) => {
         title: "Success",
         description: "Data has been stored successfully!",
         status: "success",
-        duration: 5000,
+        duration: 2000,
         isClosable: true,
       });
     } catch (error) {
@@ -135,7 +135,7 @@ const CreateDPP = ({ signer }) => {
         title: "Transaction failed",
         description: error.message,
         status: "error",
-        duration: 5000,
+        duration: 2000,
         isClosable: true,
       });
     }

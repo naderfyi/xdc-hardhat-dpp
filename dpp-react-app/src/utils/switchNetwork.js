@@ -1,7 +1,15 @@
+import { config } from '../config';
+
 export const switchNetwork = async (dataCategory) => {
+  const chainIdHex = (chainId) => {
+    // Ensuring the chain ID is in hexadecimal
+    const chainIdDecimal = parseInt(chainId);
+    return `0x${chainIdDecimal.toString(16)}`;
+  };
+
   const networkData = dataCategory === 'private' ? {
-    chainId: '0xF664', // Hexadecimal chain ID for XDC Subnet
-    rpcUrls: ['https://3.67.93.162:8545'],
+    chainId: chainIdHex(config.SUBNET_CHAIN_ID), // Hexadecimal chain ID for XDC Subnet
+    rpcUrls: [config.SUBNET_NETWORK_URL],
     chainName: 'localsubnet',
     nativeCurrency: {
       name: '0X',
@@ -10,8 +18,8 @@ export const switchNetwork = async (dataCategory) => {
     },
     blockExplorerUrls: ['https://explorer.xinfin.network/']
   } : {
-    chainId: '0x33', // Hexadecimal chain ID for Apothem
-    rpcUrls: ['https://rpc.apothem.network'],
+    chainId: chainIdHex(config.APOTHEM_CHAIN_ID), // Hexadecimal chain ID for Apothem
+    rpcUrls: [config.APOTHEM_NETWORK_URL],
     chainName: 'XDC Apothem TestNet',
     nativeCurrency: {
       name: 'TXDC',

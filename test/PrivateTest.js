@@ -292,4 +292,69 @@ describe("PrivatePass Contract", function () {
             expect(aggregatedData).not.to.include(keys[2]);          // 'status' is non-numeric and should not be aggregated
         });
     });    
+
+    it("should store and retrieve data to verify its format and integrity", async function () {
+        const id = "format-integrity-test";
+        const keys = ["testKey1", "testKey2"];
+        const values = ["testValue1", "testValue2"];
+        const allowedAddresses = [owner.address, addr1.address];
+
+        // Store data
+        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
+
+        // Retrieve data by the owner and another authorized user to see how it looks
+        const dataByOwner = await privatePass.connect(owner).getPrivateData(id);
+        const dataByAddr1 = await privatePass.connect(addr1).getPrivateData(id);
+
+        console.log("Data retrieved by owner:", dataByOwner); // To observe the JSON output
+        console.log("Data retrieved by addr1:", dataByAddr1); // To observe the JSON output
+
+        // Verifying data integrity and format
+        expect(dataByOwner).to.include("testValue1");
+        expect(dataByOwner).to.include("testValue2");
+        expect(dataByAddr1).to.include("testValue1");
+        expect(dataByAddr1).to.include("testValue2");
+    });
+
+    it("should allow the owner to view their stored data without being in allowed addresses", async function () {
+        const id = "owner-data-visibility";
+        const keys = ["ownerKey1", "ownerKey2"];
+        const values = ["ownerValue1", "ownerValue2"];
+        const allowedAddresses = [addr1.address]; // Owner is not included in the allowed list
+
+        // Owner stores private data
+        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
+
+        // Owner retrieves and checks their data
+        const retrievedData = await privatePass.connect(owner).getPrivateData(id);
+        console.log("Data retrieved by owner Nader:", retrievedData); // To observe the JSON output
+        expect(retrievedData).to.include("ownerValue1");
+        expect(retrievedData).to.include("ownerValue2");
+    });
+
+    it("should allow separate access control for different data entries", async function () {
+        const id1 = "entry-1";
+        const id2 = "entry-2";
+        const keys = ["key"];
+        const values = ["value1", "value2"];
+        const allowedAddresses1 = [addr1.address];
+        const allowedAddresses2 = [addr2.address];
+
+        // Owner stores first entry accessible only by addr1
+        await privatePass.connect(owner).storePrivateData(id1, keys, [values[0]], allowedAddresses1);
+
+        // Owner stores second entry accessible only by addr2
+        await privatePass.connect(owner).storePrivateData(id2, keys, [values[1]], allowedAddresses2);
+
+        // Ensure addr1 can access only the first entry
+        const dataByAddr1 = await privatePass.connect(addr1).getPrivateData(id1);
+        await expect(privatePass.connect(addr1).getPrivateData(id2)).to.be.rejectedWith("Access denied or ID not found");
+
+        // Ensure addr2 can access only the second entry
+        const dataByAddr2 = await privatePass.connect(addr2).getPrivateData(id2);
+        await expect(privatePass.connect(addr2).getPrivateData(id1)).to.be.rejectedWith("Access denied or ID not found");
+
+        expect(dataByAddr1).to.include("value1");
+        expect(dataByAddr2).to.include("value2");
+    });
 });

@@ -57,6 +57,7 @@ contract PublicPass {
 
         Entry storage entry = dataEntries[_id];
         string memory dataJson = "{";
+        dataJson = string(abi.encodePacked(dataJson, "\"owner\": \"", toAsciiString(entry.owner), "\", "));
         for (uint j = 0; j < entry.keys.length; j++) {
             if (j > 0) dataJson = string(abi.encodePacked(dataJson, ", "));
             string memory key = entry.keys[j];

@@ -4,189 +4,122 @@ pragma solidity ^0.8.0;
 contract PrivatePass {
     struct Entry {
         address owner;
-        mapping(string => string) data;
-        string[] keys;
-        mapping(address => bool) accessList;
+        mapping(string => string) privateData;
+        string[] keys;  // Array to store keys for iteration
+        string previousId; // Link to previous entry
+        string nextId;     // Link to next entry
+        mapping(address => bool) accessList;  // Access control list
     }
 
-    struct AggregatedData {
-        uint256 sum;
-        uint256 count;
-    }
+    mapping(string => Entry) private dataEntries;
+    uint256 private nonce; // Nonce for unique ID generation
 
-    mapping(string => Entry[]) private dataEntries;
-    mapping(string => mapping(string => AggregatedData)) private aggregateByKey;
+    // Events declaration
+    event PrivateDataStored(string id, address indexed user, string key);
+    event AccessGranted(string id, address indexed owner, address accessor);
+    event AccessRevoked(string id, address indexed owner, address accessor);
 
-    event DataStored(string id, address indexed user, string key);
-    event AggregateUpdated(string id, string aggregateJson);
-    event AccessGranted(string id, address indexed user, address accessor);
-    event AccessRevoked(string id, address indexed user, address accessor);
-    
-    event AggregateDataReady(string id, string aggregateJson);
-
-    function storePrivateData(string memory _id, string[] memory _keys, string[] memory _values, address[] memory _allowedAddresses) public {
-        Entry storage entry;
-        bool entryExists = false;
-        uint entryIndex = 0;
-
-        // Check if an entry for the ID already exists and the sender is one of the owners
-        for (uint i = 0; i < dataEntries[_id].length; i++) {
-            if (dataEntries[_id][i].owner == msg.sender) {
-                entryExists = true;
-                entryIndex = i;
-                break;
-            }
+    // Store private data and automatically generate an ID
+    function storePrivateData(string[] memory _keys, string[] memory _values, string memory _previousId) public returns (string memory) {
+        require(_keys.length == _values.length, "Keys and values length mismatch");
+        if (bytes(_previousId).length > 0) {
+            require(dataEntries[_previousId].owner != address(0), "Previous ID does not exist");
         }
 
-        if (entryExists) {
-            entry = dataEntries[_id][entryIndex];
-        } else {
-            // First, push a new empty Entry struct to the array
-            dataEntries[_id].push();
-            entry = dataEntries[_id][dataEntries[_id].length - 1];
+        string memory newId = generateUniqueId();
+        Entry storage entry = dataEntries[newId];
+        entry.owner = msg.sender;
+        entry.previousId = _previousId;
+        entry.accessList[msg.sender] = true;  // Owner automatically has access
 
-            // Then, initialize the properties
-            entry.owner = msg.sender;
-            if (_allowedAddresses.length == 0) {
-                entry.accessList[msg.sender] = true; // Ensure the sender is always included if no allowed addresses are provided
-            } else {
-                for (uint i = 0; i < _allowedAddresses.length; i++) {
-                    entry.accessList[_allowedAddresses[i]] = true;
-                }
-            }
-        }
-
-        // Update or append new data under the existing or new entry
         for (uint i = 0; i < _keys.length; i++) {
-            entry.data[_keys[i]] = _values[i];
-            // To prevent duplicate keys in the array, only add keys if the entry is new
-            if (!entryExists) {
+            if (!isKeyProcessed(entry.keys, _keys[i])) {
                 entry.keys.push(_keys[i]);
             }
-            emit DataStored(_id, msg.sender, _keys[i]);
-
-            // Check if the value is numeric and handle aggregation if it is
-            (uint256 numericValue, bool isNumeric) = tryParseUint(_values[i]);
-            if (isNumeric) {
-                AggregatedData storage aggData = aggregateByKey[_id][_keys[i]];
-                aggData.sum += numericValue;
-                aggData.count += 1;
-            }
+            entry.privateData[_keys[i]] = _values[i];
+            emit PrivateDataStored(newId, msg.sender, _keys[i]);
         }
 
-        // Emit aggregate data update after processing all keys
-        string memory aggregateJson = generateAggregateJson(_id);
-        emit AggregateUpdated(_id, aggregateJson);
+        updateLinks(_previousId, newId);
+
+        return newId;
     }
 
+
+    // Grant access to a specified address for the data associated with a specific ID
     function grantAccess(string memory _id, address _newAccessor) public {
-        for (uint i = 0; i < dataEntries[_id].length; i++) {
-            if (dataEntries[_id][i].owner == msg.sender) {
-                dataEntries[_id][i].accessList[_newAccessor] = true;
-                emit AccessGranted(_id, msg.sender, _newAccessor);
-                return;
-            }
-        }
-        revert("Only the owner can grant access");
+        require(msg.sender == dataEntries[_id].owner, "Only the owner can grant access");
+        dataEntries[_id].accessList[_newAccessor] = true;
+        emit AccessGranted(_id, msg.sender, _newAccessor);
     }
 
+    // Revoke access for a specified address for the data associated with a specific ID
     function revokeAccess(string memory _id, address _accessor) public {
-        for (uint i = 0; i < dataEntries[_id].length; i++) {
-            if (dataEntries[_id][i].owner == msg.sender) {
-                dataEntries[_id][i].accessList[_accessor] = false;
-                emit AccessRevoked(_id, msg.sender, _accessor);
-                return;
-            }
+        require(msg.sender == dataEntries[_id].owner, "Only the owner can revoke access");
+        dataEntries[_id].accessList[_accessor] = false;
+        emit AccessRevoked(_id, msg.sender, _accessor);
+    }
+
+    // Retrieve private data with access checks
+    function getPrivateData(string memory _id) public view returns (string memory) {
+        require(dataEntries[_id].owner == msg.sender || dataEntries[_id].accessList[msg.sender], "Access denied");
+        Entry storage entry = dataEntries[_id];
+        string memory dataJson = "{";
+        for (uint j = 0; j < entry.keys.length; j++) {
+            if (j > 0) dataJson = string(abi.encodePacked(dataJson, ", "));
+            string memory key = entry.keys[j];
+            dataJson = string(abi.encodePacked(dataJson, "\"", key, "\": \"", entry.privateData[key], "\""));
         }
-        revert("Only the owner can revoke access");
+        dataJson = string(abi.encodePacked(dataJson, "}"));
+        return dataJson;
     }
 
-    function getAggregateData(string memory _id) public view returns (string memory) {
-        return generateAggregateJson(_id);
-    }
-
-    function getAggregateDataAndEmitEvent(string memory _id) public {
-        string memory aggregateJson = generateAggregateJson(_id);
-        emit AggregateDataReady(_id, aggregateJson);
-    }
-
-    function generateAggregateJson(string memory _id) internal view returns (string memory) {
-        bool first = true;
-        string memory result = "{";
-        string[] memory processedKeys = new string[](dataEntries[_id].length * 10); // Oversized array to accommodate keys
-        uint processedCount = 0;
-
-        for (uint i = 0; i < dataEntries[_id].length; i++) {
-            Entry storage entry = dataEntries[_id][i];
-            for (uint j = 0; j < entry.keys.length; j++) {
-                string memory key = entry.keys[j];
-                if (isKeyProcessed(processedKeys, processedCount, key)) {
-                    continue; // Skip this key if it has already been processed
-                }
-                processedKeys[processedCount] = key;
-                processedCount++;
-
-                AggregatedData storage aggData = aggregateByKey[_id][key];
-                if (aggData.count >= 3) {
-                    if (!first) {
-                        result = string(abi.encodePacked(result, ", "));
-                    }
-                    result = string(abi.encodePacked(result, "\"", key, "\": ", uint2str(aggData.sum)));
-                    first = false;
-                }
-            }
-        }
-        result = string(abi.encodePacked(result, "}"));
-        return result;
-    }
-
-    function isKeyProcessed(string[] memory processedKeys, uint processedCount, string memory key) internal pure returns (bool) {
-        for (uint i = 0; i < processedCount; i++) {
-            if (keccak256(abi.encodePacked(processedKeys[i])) == keccak256(abi.encodePacked(key))) {
+    // Helper function to prevent duplicate keys
+    function isKeyProcessed(string[] storage keys, string memory newKey) private view returns (bool) {
+        for (uint i = 0; i < keys.length; i++) {
+            if (keccak256(abi.encodePacked(keys[i])) == keccak256(abi.encodePacked(newKey))) {
                 return true;
             }
         }
         return false;
     }
 
-    function getPrivateData(string memory _id) public view returns (string memory) {
-        string memory dataJson = "[";
-        bool hasEntries = false;
-
-        for (uint i = 0; i < dataEntries[_id].length; i++) {
-            Entry storage entry = dataEntries[_id][i];
-            if (entry.owner == msg.sender || entry.accessList[msg.sender]) {
-                if (hasEntries) {
-                    dataJson = string(abi.encodePacked(dataJson, ", "));
-                }
-                dataJson = string(abi.encodePacked(dataJson, formatDataAsJson(entry)));
-                hasEntries = true;
-            }
+    // Update links between entries
+    function updateLinks(string memory _previousId, string memory _newId) private {
+        if (bytes(_previousId).length > 0 && dataEntries[_previousId].owner != address(0)) {
+            dataEntries[_previousId].nextId = _newId;
         }
-
-        if (!hasEntries) {
-            revert("Access denied or ID not found");
-        }
-
-        dataJson = string(abi.encodePacked(dataJson, "]"));
-        return dataJson;
     }
 
-    function formatDataAsJson(Entry storage entry) internal view returns (string memory) {
-        string memory dataJson = "{\"owner\": \"";
-        dataJson = string(abi.encodePacked(dataJson, toAsciiString(entry.owner), "\", \"data\": {"));
-        for (uint j = 0; j < entry.keys.length; j++) {
-            if (j > 0) dataJson = string(abi.encodePacked(dataJson, ", "));
-            string memory key = entry.keys[j];
-            dataJson = string(abi.encodePacked(dataJson, "\"", key, "\": \"", entry.data[key], "\""));
+    // Generate a unique ID based on address, timestamp, and nonce
+    function generateUniqueId() private returns (string memory) {
+        nonce++;
+        return string(abi.encodePacked("ID-", toAsciiString(msg.sender), "-", uintToString(block.timestamp), "-", uintToString(nonce)));
+    }
+
+    function uintToString(uint256 _i) internal pure returns (string memory) {
+        if (_i == 0) {
+            return "0";
         }
-        return string(abi.encodePacked(dataJson, "}}"));
+        uint256 temp = _i;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (_i != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + _i % 10));
+            _i /= 10;
+        }
+        return string(buffer);
     }
 
     function toAsciiString(address x) internal pure returns (string memory) {
         bytes memory s = new bytes(40);
         for (uint i = 0; i < 20; i++) {
-            bytes1 b = bytes1(uint8(uint(uint160(x)) / (2**(8*(19 - i)))));
+            bytes1 b = bytes1(uint8(uint(uint160(x)) / (2 ** (8 * (19 - i)))));
             bytes1 hi = bytes1(uint8(b) / 16);
             bytes1 lo = bytes1(uint8(b) - 16 * uint8(hi));
             s[2*i] = char(hi);
@@ -198,44 +131,5 @@ contract PrivatePass {
     function char(bytes1 b) internal pure returns (bytes1 c) {
         if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
         else return bytes1(uint8(b) + 0x57);
-    }
-
-    function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint j = _i;
-        uint len;
-        while (j != 0) {
-            len++;
-            j /= 10;
-        }
-        bytes memory bstr = new bytes(len);
-        uint k = len;
-        while (_i != 0) {
-            k = k-1;
-            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
-            bytes1 b1 = bytes1(temp);
-            bstr[k] = b1;
-            _i /= 10;
-        }
-        return string(bstr);
-    }
-
-    function tryParseUint(string memory _value) internal pure returns (uint256, bool) {
-        bytes memory b = bytes(_value);
-        uint256 result = 0;
-        bool hasDigits = false;
-
-        for (uint i = 0; i < b.length; i++) {
-            if (b[i] >= 0x30 && b[i] <= 0x39) {
-                result = result * 10 + (uint256(uint8(b[i])) - uint8(0x30));
-                hasDigits = true;
-            } else {
-                return (0, false); // As soon as a non-digit is found, return false
-            }
-        }
-
-        return (result, hasDigits);
     }
 }

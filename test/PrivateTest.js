@@ -1,360 +1,282 @@
 const { ethers } = require("hardhat");
 
-describe("PrivatePass Contract", function () {
-    let expect;
-    let PrivatePass, privatePass;
-    let owner, addr1, addr2, addr3;
+describe("PrivatePass Contract Tests", function () {
+    let privatePass;
+    let owner, user1, user2, user3;
 
     before(async function () {
         const chai = await import("chai");
         const chaiAsPromised = await import("chai-as-promised");
         chai.use(chaiAsPromised.default);
-        expect = chai.expect;
+        global.expect = chai.expect;
 
-        [owner, addr1, addr2, addr3] = await ethers.getSigners();
-
-        PrivatePass = await ethers.getContractFactory("PrivatePass");
+        [owner, user1, user2, user3] = await ethers.getSigners();
+        const PrivatePass = await ethers.getContractFactory("PrivatePass");
         privatePass = await PrivatePass.deploy();
         await privatePass.deployed();
     });
 
-    it("should allow storing and retrieving private data with correct access control", async function () {
-        const id = "confidential-12345";
-        const keys = ["sensitiveInfo", "securityLevel"];
-        const values = ["classified", "high"];
-        const allowedAddresses = [addr1.address, addr2.address];
+    describe("Unit Tests for Individual Functions", function () {
+        describe("storePrivateData", function () {
+            it("should store data with valid inputs and generate an ID", async function () {
+                const keys = ["materialType", "quantity", "sourceLocation", "extractionDate"];
+                const values = ["Lithium", "2000 kg", "Australia", "2024-05-18"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
 
-        // Owner stores private data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
+                const dataJson = await privatePass.getPrivateData(newId);
+                console.log(`Data JSON: ${dataJson}`);
+                expect(dataJson).to.include('"materialType": "Lithium"');
+                expect(dataJson).to.include('"quantity": "2000 kg"');
+                expect(dataJson).to.include('"sourceLocation": "Australia"');
+                expect(dataJson).to.include('"extractionDate": "2024-05-18"');
+            });
 
-        // Allowed user retrieves data
-        const dataByAllowedUser = await privatePass.connect(addr1).getPrivateData(id);
-        expect(dataByAllowedUser).to.include("classified");
-        expect(dataByAllowedUser).to.include("high");
+            it("should handle the first entry with an empty _previousId", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Copper", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
 
-        // Unauthorized access attempt
-        await expect(privatePass.connect(addr3).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
-    });
+                console.log(`New ID: ${newId}`);
+                expect(newId).to.exist;
+            });
 
-    it("should handle multiple types of data for a single user correctly", async function () {
-        const id = "multi-type-123";
-        const keys = ["dataType1", "dataType2"];
-        const values = ["value1", "2"];
-        const allowedAddresses = [addr1.address];
+            it("should revert with mismatched keys and values", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium"];
+                await expect(privatePass.storePrivateData(keys, values, "")).to.be.rejectedWith("Keys and values length mismatch");
+            });
 
-        // User 1 stores multiple data types
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
-
-        // Retrieve public data by any authorized user
-        const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
-        expect(retrievedData).to.include("value1");
-        expect(retrievedData).to.include("2");
-    });
-
-    it("should append data correctly under the same ID by multiple users with proper access control", async function () {
-        const id = "shared-12345";
-        const keysOwner = ["firstOwnerData"];
-        const valuesOwner = ["OwnerData"];
-        const keysAddr1 = ["secondOwnerData"];
-        const valuesAddr1 = ["Addr1Data"];
-        const allowedAddresses = [owner.address, addr1.address, addr2.address]; // Explicitly include the owner
-    
-        // Owner adds initial data
-        await privatePass.connect(owner).storePrivateData(id, keysOwner, valuesOwner, allowedAddresses);
-    
-        // Retrieve data after owner's addition
-        const dataAfterOwnerAddition = await privatePass.connect(owner).getPrivateData(id);
-        console.log("Data after owner addition:", dataAfterOwnerAddition);
-    
-        // addr1 adds more data
-        await privatePass.connect(addr1).storePrivateData(id, keysAddr1, valuesAddr1, allowedAddresses);
-    
-        // Retrieve data after addr1's addition
-        const dataAfterAddr1Addition = await privatePass.connect(owner).getPrivateData(id);
-        console.log("Data after addr1 addition:", dataAfterAddr1Addition);
-    
-        // Check data accessibility and structure
-        const retrievedDataOwner = await privatePass.connect(owner).getPrivateData(id);
-        const retrievedDataAddr1 = await privatePass.connect(addr1).getPrivateData(id);
-    
-        console.log("Data retrieved by owner:", retrievedDataOwner); // To observe the JSON output
-        console.log("Data retrieved by addr1:", retrievedDataAddr1); // To observe the JSON output
-    
-        expect(retrievedDataOwner).to.include("\"firstOwnerData\": \"OwnerData\"");
-        expect(retrievedDataOwner).to.include("\"secondOwnerData\": \"Addr1Data\"");
-    
-        expect(retrievedDataAddr1).to.include("OwnerData");
-        expect(retrievedDataAddr1).to.include("Addr1Data");
-    
-        // Unauthorized access attempt
-        await expect(privatePass.connect(addr3).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
-    });
-      
-
-    it("should ensure data is accessible and structured as JSON-like format for all authorized users", async function () {
-        const id = "format-test-123";
-        const keys = ["key1", "key2"];
-        const values = ["value1", "value2"];
-        const allowedAddresses = [addr1.address, addr2.address];
-
-        // Store data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
-
-        // Retrieve and validate JSON format
-        const dataByOwner = await privatePass.connect(owner).getPrivateData(id);
-        const dataByAddr1 = await privatePass.connect(addr1).getPrivateData(id);
-
-        console.log(dataByOwner); // To verify JSON structure
-        expect(dataByOwner).to.include("{\"owner\":");
-        expect(dataByOwner).to.include("\"key1\": \"value1\"");
-        expect(dataByOwner).to.include("\"key2\": \"value2\"");
-
-        expect(dataByAddr1).to.include("{\"owner\":");
-        expect(dataByAddr1).to.include("\"key1\": \"value1\"");
-        expect(dataByAddr1).to.include("\"key2\": \"value2\"");
-
-        // Ensure addr2 also has access
-        const dataByAddr2 = await privatePass.connect(addr2).getPrivateData(id);
-        expect(dataByAddr2).to.include("value1");
-        expect(dataByAddr2).to.include("value2");
-
-        // Check for unauthorized access by addr3
-        await expect(privatePass.connect(addr3).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
-    });
-
-    it("should deny access to unauthorized users and handle non-existent data", async function () {
-        const id = "non-existent";
-        
-        // Attempt to access data that does not exist
-        await expect(privatePass.connect(addr1).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
-
-        // Setup data for another test
-        const keys = ["dataKey"];
-        const values = ["dataValue"];
-        const allowedAddresses = [addr1.address]; // Only addr1 is authorized
-
-        // Store data
-        await privatePass.connect(owner).storePrivateData("existent", keys, values, allowedAddresses);
-
-        // Unauthorized user tries to access
-        await expect(privatePass.connect(addr2).getPrivateData("existent")).to.be.rejectedWith("Access denied or ID not found");
-    });
-
-    it("should allow granting access to a new address after data has been stored", async function () {
-        const id = "access-test";
-        const keys = ["dataKey"];
-        const values = ["dataValue"];
-        const initialAllowedAddresses = [addr1.address];
-    
-        // Owner stores private data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, initialAllowedAddresses);
-    
-        // Grant access to a new address
-        const newAllowedAddress = addr2.address;
-        await privatePass.connect(owner).grantAccess(id, newAllowedAddress);
-    
-        // New address should now have access
-        const dataByNewAddress = await privatePass.connect(addr2).getPrivateData(id);
-        expect(dataByNewAddress).to.include("dataValue");
-    });
-
-    it("should allow revoking access from an address", async function () {
-        const id = "revoke-test";
-        const keys = ["dataKey"];
-        const values = ["dataValue"];
-        const allowedAddresses = [addr1.address, addr2.address];
-    
-        // Owner stores private data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
-    
-        // Revoke access from addr2
-        await privatePass.connect(owner).revokeAccess(id, addr2.address);
-    
-        // addr2 should no longer have access
-        await expect(privatePass.connect(addr2).getPrivateData(id)).to.be.rejectedWith("Access denied or ID not found");
-    });
-
-    it("should handle storing and retrieving data with empty keys and values", async function () {
-        const id = "empty-key-value-test";
-        const keys = [""];
-        const values = [""];
-    
-        // Owner stores private data with empty key and value
-        await privatePass.connect(owner).storePrivateData(id, keys, values, [addr1.address]);
-    
-        // Retrieve data
-        const retrievedData = await privatePass.connect(addr1).getPrivateData(id);
-        expect(retrievedData).to.include("\"\": \"\"");
-    });
-    
-    describe("should handle numeric and non-numeric data aggregation correctly", function () {
-        let id, keyNumeric, keyNonNumeric, allowedAddresses;
-    
-        before(async function () {
-            id = "aggregation-test";
-            keyNumeric = "temperature";
-            keyNonNumeric = "status";
-            allowedAddresses = [owner.address, addr1.address, addr2.address];
+            it("should revert if non-existent _previousId is provided", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                await expect(privatePass.storePrivateData(keys, values, "nonExistentId")).to.be.rejectedWith("Previous ID does not exist");
+            });
         });
-    
-        it("should correctly aggregate numeric private data and only return aggregated data when there are sufficient contributions", async function () {
-            // Storing numeric data
-            await privatePass.connect(owner).storePrivateData(id, [keyNumeric], ["100"], allowedAddresses);
-            await privatePass.connect(addr1).storePrivateData(id, [keyNumeric], ["200"], allowedAddresses);
-            await privatePass.connect(addr2).storePrivateData(id, [keyNumeric], ["50"], allowedAddresses);
-    
-            // Retrieving and verifying aggregated data
-            const aggregatedData = await privatePass.getAggregateData(id);
-            expect(aggregatedData).to.include(`"${keyNumeric}": 350`);
+
+        describe("updateLinks", function () {
+            it("should update nextId of a previous entry correctly", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Nickel", "1000 kg"];
+                const tx1 = await privatePass.storePrivateData(keys, values, "");
+                const receipt1 = await tx1.wait();
+                const firstId = receipt1.events[0].args.id;
+            
+                const tx2 = await privatePass.storePrivateData(keys, values, firstId);
+                const receipt2 = await tx2.wait();
+                const secondId = receipt2.events[0].args.id;
+            
+                const previousEntry = await privatePass.dataEntries(firstId);
+                console.log(`Previous Entry Next ID: ${previousEntry.nextId}`);
+                expect(previousEntry.nextId).to.equal(secondId);
+            });            
+
+            it("should not attempt to link if the previous entry does not exist", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Nickel", "1000 kg"];
+                const nonExistentId = "ID-9999";
+                
+                // Attempt to store data with a non-existent previous ID and expect it to fail
+                const tx = privatePass.storePrivateData(keys, values, nonExistentId);
+                await expect(tx).to.be.rejectedWith("Previous ID does not exist");
+                tx.catch(e => console.log(`Error: ${e.message}`)); // Log the error for debugging
+            });
+            
         });
-    
-        it("should not return aggregated data if there are less than three contributions of numeric data", async function () {
-            const idLess = "less-contributions";
-            // Storing numeric data but only from two users
-            await privatePass.connect(owner).storePrivateData(idLess, [keyNumeric], ["100"], allowedAddresses);
-            await privatePass.connect(addr1).storePrivateData(idLess, [keyNumeric], ["200"], allowedAddresses);
-    
-            // Attempt to retrieve aggregated data
-            const aggregatedData = await privatePass.getAggregateData(idLess);
-            expect(aggregatedData).to.equal("{}");
+
+        describe("grantAccess", function () {
+            it("should allow the owner to grant access", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await expect(privatePass.grantAccess(newId, user1.address)).to.not.be.rejected;
+            });
+
+            it("should prevent non-owners from granting access", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await expect(privatePass.connect(user1).grantAccess(newId, user2.address)).to.be.rejectedWith("Only the owner can grant access");
+            });
         });
-    
-        it("should not aggregate non-numeric data", async function () {
-            // Storing non-numeric data
-            await privatePass.connect(owner).storePrivateData(id, [keyNonNumeric], ["okay"], allowedAddresses);
-            await privatePass.connect(addr1).storePrivateData(id, [keyNonNumeric], ["good"], allowedAddresses);
-            await privatePass.connect(addr2).storePrivateData(id, [keyNonNumeric], ["excellent"], allowedAddresses);
-    
-            // Retrieving aggregated data should not include non-numeric keys
-            const aggregatedData = await privatePass.getAggregateData(id);
-            expect(aggregatedData).not.to.include(keyNonNumeric);
+
+        describe("revokeAccess", function () {
+            it("should allow the owner to revoke access", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await privatePass.grantAccess(newId, user1.address);
+                await expect(privatePass.revokeAccess(newId, user1.address)).to.not.be.rejected;
+            });
+
+            it("should prevent non-owners from revoking access", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await privatePass.grantAccess(newId, user1.address);
+                await expect(privatePass.connect(user1).revokeAccess(newId, user2.address)).to.be.rejectedWith("Only the owner can revoke access");
+            });
         });
-    });    
-    
-    it("should correctly aggregate private data across multiple users and only return aggregated data when there are sufficient contributions", async function () {
-        const id = "data-aggregate";
-        const key = "co2";
-        const values = ["100", "200", "300", "50"];
-        const allowedAddresses = [owner.address, addr1.address, addr2.address, addr3.address];
-    
-        // Different users store data under the same ID and same key
-        await privatePass.connect(owner).storePrivateData(id, [key], [values[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(id, [key], [values[1]], allowedAddresses);
-        await privatePass.connect(addr2).storePrivateData(id, [key], [values[2]], allowedAddresses);
-        await privatePass.connect(addr3).storePrivateData(id, [key], [values[3]], allowedAddresses);
-    
-        // Attempt to retrieve aggregated data
-        const aggregatedData = await privatePass.getAggregateData(id);
-        // Check if the aggregated data includes the sum of the "co2" from four contributions which is 650
-        expect(aggregatedData).to.include(`"co2": 650`);
-    
-        // Now check a scenario where less than three users contribute
-        const idLess = "data-less";
-        await privatePass.connect(owner).storePrivateData(idLess, [key], [values[0]], allowedAddresses);
-        await privatePass.connect(addr1).storePrivateData(idLess, [key], [values[1]], allowedAddresses);
-    
-        // Retrieving aggregated data where contributions are less than required
-        const aggregatedDataLess = await privatePass.getAggregateData(idLess);
-        expect(aggregatedDataLess).to.equal("{}"); // Expect an empty JSON object since only two contributions
-    });
-    
-    describe("Aggregate JSON Structure Validation", function () {
-        let id, keys, values, allowedAddresses;
-    
-        before(async function () {
-            id = "json-structure-test";
-            keys = ["co2", "humidity", "status"];
-            values = ["400", "50", "active"];
-            allowedAddresses = [owner.address, addr1.address, addr2.address, addr3.address];
+
+        describe("getPrivateData", function () {
+            it("should allow the owner to retrieve data", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                const dataJson = await privatePass.getPrivateData(newId);
+                console.log(`Data JSON: ${dataJson}`);
+                expect(dataJson).to.include('"materialType": "Lithium"');
+                expect(dataJson).to.include('"quantity": "1000 kg"');
+            });
+
+            it("should allow granted users to retrieve data", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await privatePass.grantAccess(newId, user1.address);
+                const dataJson = await privatePass.connect(user1).getPrivateData(newId);
+                console.log(`Data JSON: ${dataJson}`);
+                expect(dataJson).to.include('"materialType": "Lithium"');
+                expect(dataJson).to.include('"quantity": "1000 kg"');
+            });
+
+            it("should prevent unauthorized users from retrieving data", async function () {
+                const keys = ["materialType", "quantity"];
+                const values = ["Lithium", "1000 kg"];
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+            
+                await expect(privatePass.connect(user1).getPrivateData(newId)).to.be.rejectedWith("Access denied");
+            });
         });
-    
-        it("should verify correct JSON structure in aggregate data with varied contributions", async function () {
-            // Ensuring three numeric contributions to "co2" to meet aggregation criteria
-            await privatePass.connect(owner).storePrivateData(id, [keys[0]], [values[0]], allowedAddresses);
-            await privatePass.connect(addr1).storePrivateData(id, [keys[0]], ["600"], allowedAddresses); // Second CO2 contribution
-            await privatePass.connect(addr2).storePrivateData(id, [keys[0]], ["300"], allowedAddresses); // Third CO2 contribution
-    
-            // Additional contributions to "humidity"
-            await privatePass.connect(addr1).storePrivateData(id, [keys[1]], [values[1]], allowedAddresses);
-            await privatePass.connect(addr2).storePrivateData(id, [keys[1]], ["60"], allowedAddresses); // Second Humidity contribution
-            await privatePass.connect(addr3).storePrivateData(id, [keys[1]], ["40"], allowedAddresses); // Third Humidity contribution
-    
-            // Non-numeric contribution which should not be aggregated
-            await privatePass.connect(addr3).storePrivateData(id, [keys[2]], [values[2]], allowedAddresses);
-    
-            // Attempt to retrieve aggregated data
-            const aggregatedData = await privatePass.getAggregateData(id);
-            console.log("Aggregated Data:", aggregatedData);
-
-            // Checking JSON structure for correct aggregation of numeric data and exclusion of non-numeric data
-            expect(aggregatedData).to.include(`"${keys[0]}": 1300`); // Sum of CO2 contributions
-            expect(aggregatedData).to.include(`"${keys[1]}": 150`);   // Sum of Humidity contributions
-            expect(aggregatedData).not.to.include(keys[2]);          // 'status' is non-numeric and should not be aggregated
-        });
-    });    
-
-    it("should store and retrieve data to verify its format and integrity", async function () {
-        const id = "format-integrity-test";
-        const keys = ["testKey1", "testKey2"];
-        const values = ["testValue1", "testValue2"];
-        const allowedAddresses = [owner.address, addr1.address];
-
-        // Store data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
-
-        // Retrieve data by the owner and another authorized user to see how it looks
-        const dataByOwner = await privatePass.connect(owner).getPrivateData(id);
-        const dataByAddr1 = await privatePass.connect(addr1).getPrivateData(id);
-
-        console.log("Data retrieved by owner:", dataByOwner); // To observe the JSON output
-        console.log("Data retrieved by addr1:", dataByAddr1); // To observe the JSON output
-
-        // Verifying data integrity and format
-        expect(dataByOwner).to.include("testValue1");
-        expect(dataByOwner).to.include("testValue2");
-        expect(dataByAddr1).to.include("testValue1");
-        expect(dataByAddr1).to.include("testValue2");
     });
 
-    it("should allow the owner to view their stored data without being in allowed addresses", async function () {
-        const id = "owner-data-visibility";
-        const keys = ["ownerKey1", "ownerKey2"];
-        const values = ["ownerValue1", "ownerValue2"];
-        const allowedAddresses = [addr1.address]; // Owner is not included in the allowed list
+    describe("Integration Tests", function () {
+        it("should simulate a complete lifecycle with access control", async function () {
+            // Simulate mining stage
+            const miningKeys = ["materialType", "quantity", "sourceLocation", "extractionDate"];
+            const miningValues = ["Lithium", "2000 kg", "Australia", "2024-05-18"];
+            const miningTx = await privatePass.storePrivateData(miningKeys, miningValues, "");
+            const miningReceipt = await miningTx.wait();
+            const miningId = miningReceipt.events[0].args.id;
+            const miningData = await privatePass.getPrivateData(miningId);
+            console.log(`Mining Data: ${miningData}`);
+            expect(miningData).to.include('"materialType": "Lithium"');
+            expect(miningData).to.include('"quantity": "2000 kg"');
 
-        // Owner stores private data
-        await privatePass.connect(owner).storePrivateData(id, keys, values, allowedAddresses);
+            // Grant access to manufacturer
+            await privatePass.grantAccess(miningId, user1.address);
 
-        // Owner retrieves and checks their data
-        const retrievedData = await privatePass.connect(owner).getPrivateData(id);
-        console.log("Data retrieved by owner Nader:", retrievedData); // To observe the JSON output
-        expect(retrievedData).to.include("ownerValue1");
-        expect(retrievedData).to.include("ownerValue2");
+            // Simulate manufacturing stage
+            const manufacturingKeys = ["productType", "quantity", "manufacturer", "productionDate"];
+            const manufacturingValues = ["Battery", "1000 units", "Factory1", "2024-06-01"];
+            const manufacturingTx = await privatePass.connect(user1).storePrivateData(manufacturingKeys, manufacturingValues, miningId);
+            const manufacturingReceipt = await manufacturingTx.wait();
+            const manufacturingId = manufacturingReceipt.events[0].args.id;
+            const manufacturingData = await privatePass.getPrivateData(manufacturingId);
+            console.log(`Manufacturing Data: ${manufacturingData}`);
+            expect(manufacturingData).to.include('"productType": "Battery"');
+            expect(manufacturingData).to.include('"quantity": "1000 units"');
+
+            // Simulate assembly stage
+            const assemblyKeys = ["assemblyType", "quantity", "assembler", "assemblyDate"];
+            const assemblyValues = ["Pack", "1000 units", "AssemblyLine1", "2024-07-01"];
+            const assemblyTx = await privatePass.storePrivateData(assemblyKeys, assemblyValues, manufacturingId);
+            const assemblyReceipt = await assemblyTx.wait();
+            const assemblyId = assemblyReceipt.events[0].args.id;
+            const assemblyData = await privatePass.getPrivateData(assemblyId);
+            console.log(`Assembly Data: ${assemblyData}`);
+            expect(assemblyData).to.include('"assemblyType": "Pack"');
+            expect(assemblyData).to.include('"quantity": "1000 units"');
+        });
     });
 
-    it("should allow separate access control for different data entries", async function () {
-        const id1 = "entry-1";
-        const id2 = "entry-2";
-        const keys = ["key"];
-        const values = ["value1", "value2"];
-        const allowedAddresses1 = [addr1.address];
-        const allowedAddresses2 = [addr2.address];
+    describe("Performance and Gas Usage Tests", function () {
+        it("should estimate gas usage for data storage", async function () {
+            const keys = ["materialType", "quantity"];
+            const values = ["Lithium", "1000 kg"];
+            const gasEstimate = await privatePass.estimateGas.storePrivateData(keys, values, "");
+            console.log(`Gas estimate for storePrivateData: ${gasEstimate.toString()}`);
+        });
 
-        // Owner stores first entry accessible only by addr1
-        await privatePass.connect(owner).storePrivateData(id1, keys, [values[0]], allowedAddresses1);
+        it("should estimate gas usage for data retrieval", async function () {
+            const keys = ["materialType", "quantity"];
+            const values = ["Lithium", "1000 kg"];
+            const tx = await privatePass.storePrivateData(keys, values, "");
+            const receipt = await tx.wait();
+            const newId = receipt.events[0].args.id;
+            const gasEstimate = await privatePass.estimateGas.getPrivateData(newId);
+            console.log(`Gas estimate for getPrivateData: ${gasEstimate.toString()}`);
+        });
+    });
 
-        // Owner stores second entry accessible only by addr2
-        await privatePass.connect(owner).storePrivateData(id2, keys, [values[1]], allowedAddresses2);
+    describe("Edge and Corner Case Tests", function () {
+        it("should handle input extremes", async function () {
+            const keys = ["materialType", "quantity"];
+            const values = ["Lithium", "999999999 kg"];
+            const tx = await privatePass.storePrivateData(keys, values, "");
+            const receipt = await tx.wait();
+            const newId = receipt.events[0].args.id;
+            expect(newId).to.exist;
 
-        // Ensure addr1 can access only the first entry
-        const dataByAddr1 = await privatePass.connect(addr1).getPrivateData(id1);
-        await expect(privatePass.connect(addr1).getPrivateData(id2)).to.be.rejectedWith("Access denied or ID not found");
+            const dataJson = await privatePass.getPrivateData(newId);
+            console.log(`Data JSON for extreme input: ${dataJson}`);
+            expect(dataJson).to.include('"quantity": "999999999 kg"');
+        });
 
-        // Ensure addr2 can access only the second entry
-        const dataByAddr2 = await privatePass.connect(addr2).getPrivateData(id2);
-        await expect(privatePass.connect(addr2).getPrivateData(id1)).to.be.rejectedWith("Access denied or ID not found");
+        it("should handle boundary conditions", async function () {
+            const keys = Array(1000).fill("key");
+            const values = Array(1000).fill("value");
+            await expect(privatePass.storePrivateData(keys, values, "")).to.be.rejectedWith("Transaction gas limit is 30715160 and exceeds block gas limit of 30000000");
+        });
 
-        expect(dataByAddr1).to.include("value1");
-        expect(dataByAddr2).to.include("value2");
+        it("should simulate concurrent access", async function () {
+            const keys = ["materialType", "quantity"];
+            const values = ["Lithium", "1000 kg"];
+            const tx1 = await privatePass.storePrivateData(keys, values, "");
+            const receipt1 = await tx1.wait();
+            const id1 = receipt1.events[0].args.id;
+
+            const tx2 = await privatePass.storePrivateData(keys, values, "");
+            const receipt2 = await tx2.wait();
+            const id2 = receipt2.events[0].args.id;
+
+            expect(id1).to.not.equal(id2);
+        });
+    });
+
+    describe("Stress and Load Testing", function () {
+        it("should handle high load", async function () {
+            const keys = ["materialType", "quantity"];
+            const values = ["Lithium", "1000 kg"];
+            for (let i = 0; i < 100; i++) {
+                const tx = await privatePass.storePrivateData(keys, values, "");
+                const receipt = await tx.wait();
+                const newId = receipt.events[0].args.id;
+                expect(newId).to.exist;
+            }
+        });
     });
 });

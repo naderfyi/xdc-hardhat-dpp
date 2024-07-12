@@ -11,7 +11,7 @@ contract PrivatePass {
         mapping(address => bool) accessList;  // Access control list
     }
 
-    mapping(string => Entry) private dataEntries;
+    mapping(string => Entry) public dataEntries;
     uint256 private nonce; // Nonce for unique ID generation
 
     // Events declaration
@@ -47,7 +47,6 @@ contract PrivatePass {
         updateLinks(_previousId, newId);
         return newId;
     }
-
 
     // Grant access to a specified address for the data associated with a specific ID
     function grantAccess(string memory _id, address _newAccessor) public {
@@ -98,6 +97,11 @@ contract PrivatePass {
     function generateUniqueId() private returns (string memory) {
         nonce++;
         return string(abi.encodePacked("ID-", toAsciiString(msg.sender), "-", uintToString(block.timestamp), "-", uintToString(nonce)));
+    }
+
+    // Check if a user has access to a specific entry
+    function hasAccess(string memory _id, address _user) public view returns (bool) {
+        return dataEntries[_id].accessList[_user];
     }
 
     function uintToString(uint256 _i) internal pure returns (string memory) {

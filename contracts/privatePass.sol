@@ -20,7 +20,7 @@ contract PrivatePass {
     event AccessRevoked(string id, address indexed owner, address accessor);
 
     // Store private data and automatically generate an ID
-    function storePrivateData(string[] memory _keys, string[] memory _values, string memory _previousId) public returns (string memory) {
+    function storePrivateData(string[] memory _keys, string[] memory _values, address[] memory _accessors, string memory _previousId) public returns (string memory) {
         require(_keys.length == _values.length, "Keys and values length mismatch");
         if (bytes(_previousId).length > 0) {
             require(dataEntries[_previousId].owner != address(0), "Previous ID does not exist");
@@ -30,18 +30,21 @@ contract PrivatePass {
         Entry storage entry = dataEntries[newId];
         entry.owner = msg.sender;
         entry.previousId = _previousId;
-        entry.accessList[msg.sender] = true;  // Owner automatically has access
 
-        for (uint i = 0; i < _keys.length; i++) {
-            if (!isKeyProcessed(entry.keys, _keys[i])) {
-                entry.keys.push(_keys[i]);
-            }
-            entry.privateData[_keys[i]] = _values[i];
-            emit PrivateDataStored(newId, msg.sender, _keys[i]);
+        // Set access for owner and specified addresses
+        entry.accessList[msg.sender] = true;
+        for (uint i = 0; i < _accessors.length; i++) {
+            entry.accessList[_accessors[i]] = true;
+            emit AccessGranted(newId, msg.sender, _accessors[i]);
+        }
+
+        for (uint j = 0; j < _keys.length; j++) {
+            entry.keys.push(_keys[j]);
+            entry.privateData[_keys[j]] = _values[j];
+            emit PrivateDataStored(newId, msg.sender, _keys[j]);
         }
 
         updateLinks(_previousId, newId);
-
         return newId;
     }
 

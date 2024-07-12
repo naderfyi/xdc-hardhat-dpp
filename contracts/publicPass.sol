@@ -11,40 +11,44 @@ contract PublicPass {
     }
 
     mapping(string => Entry) public dataEntries;
+    mapping(address => bool) public hasShipment;
 
-    // Event to indicate data storage with newly generated ID
+    uint256 private nonce; // Adding nonce for unique ID generation
+
+    // Events declaration
     event PublicDataStored(string id, address indexed user, string key);
-
-    // Event for aggregated data
     event AggregateDataStored(string id, string data);
 
     // Store public data and automatically generate an ID
     function storePublicData(string[] memory _keys, string[] memory _values, string memory _previousId) public returns (string memory) {
-        require(_keys.length == _values.length, "Keys and values length mismatch");
-        for (uint i = 0; i < _keys.length; i++) {
-            require(bytes(_keys[i]).length > 0, "Key cannot be empty");
+        if (bytes(_previousId).length > 0) {
+            require(dataEntries[_previousId].owner != address(0), "Previous ID does not exist");
+            require(hasShipment[msg.sender], "Sender does not have a shipment");
         }
+        require(_keys.length == _values.length, "Keys and values length mismatch");
 
         string memory newId = generateUniqueId();
-
         Entry storage entry = dataEntries[newId];
         entry.owner = msg.sender;
         entry.previousId = _previousId;
 
         for (uint i = 0; i < _keys.length; i++) {
-            if (bytes(entry.publicData[_keys[i]]).length == 0) {
-                entry.keys.push(_keys[i]);
-            }
+            entry.keys.push(_keys[i]);
             entry.publicData[_keys[i]] = _values[i];
             emit PublicDataStored(newId, msg.sender, _keys[i]);
         }
 
-        // Link previous entry's nextId to the new entry if there is a previous entry
-        if (bytes(_previousId).length > 0 && dataEntries[_previousId].owner != address(0)) {
-            dataEntries[_previousId].nextId = newId;
-        }
+        updateLinks(_previousId, newId);
+        hasShipment[msg.sender] = true;
 
         return newId;
+    }
+
+    // Helper function to manage the linking of entries
+    function updateLinks(string memory _previousId, string memory _newId) internal {
+        if (bytes(_previousId).length > 0 && dataEntries[_previousId].owner != address(0)) {
+            dataEntries[_previousId].nextId = _newId;
+        }
     }
 
     // Retrieve public data in JSON format for a given ID
@@ -61,36 +65,45 @@ contract PublicPass {
         dataJson = string(abi.encodePacked(dataJson, "}"));
         return dataJson;
     }
-
-    // Retrieve full lifecycle data starting from a given ID
-    function getFullLifecycleData(string memory _startId) public view returns (string memory) {
-        require(bytes(_startId).length > 0 && dataEntries[_startId].owner != address(0), "ID not found");
-
-        string memory dataJson = "[";
+    
+    // Function to aggregate data across linked entries
+    function aggregateData(string memory _startId, string memory _key) public view returns (uint256) {
+        uint256 total = 0;
         string memory currentId = _startId;
-        bool first = true;
 
         while (bytes(currentId).length > 0) {
             Entry storage entry = dataEntries[currentId];
-            if (!first) {
-                dataJson = string(abi.encodePacked(dataJson, ", "));
-            }
-            dataJson = string(abi.encodePacked(dataJson, getPublicData(currentId)));
+            total += parseUint(entry.publicData[_key]);
             currentId = entry.nextId;
-            first = false;
         }
 
-        dataJson = string(abi.encodePacked(dataJson, "]"));
-        return dataJson;
+        return total;
     }
-    
+
+    // Convert string to uint, safely ignoring non-numeric values
+    function parseUint(string memory _value) public pure returns (uint256) {
+        bytes memory b = bytes(_value);
+        uint256 result = 0;
+        for (uint i = 0; i < b.length; i++) {
+            uint8 byteValue = uint8(b[i]);
+            if (byteValue >= 48 && byteValue <= 57) { // '0' to '9'
+                result = result * 10 + (uint256(byteValue) - 48);
+            } else {
+                break;
+            }
+        }
+        return result;
+    }
+
     // Store aggregate data
     function storeAggregateData(string memory _id, string memory _aggregateJson) public {
         emit AggregateDataStored(_id, _aggregateJson);
     }
 
-    function generateUniqueId() private view returns (string memory) {
-        return string(abi.encodePacked("ID-", toAsciiString(msg.sender), "-", uintToString(block.timestamp)));
+    // Generate a unique ID based on address, timestamp, and nonce
+    function generateUniqueId() public returns (string memory) {
+        nonce++;
+        return string(abi.encodePacked("ID-", toAsciiString(msg.sender), "-", uintToString(block.timestamp), "-", uintToString(nonce)));
     }
 
     function uintToString(uint256 _i) internal pure returns (string memory) {

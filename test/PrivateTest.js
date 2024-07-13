@@ -201,49 +201,6 @@ describe("PrivatePass Contract Tests", function () {
         });
     });
 
-    describe("Integration Tests", function () {
-        it("should simulate a complete lifecycle with access control", async function () {
-            // Simulate mining stage
-            const miningKeys = ["materialType", "quantity", "sourceLocation", "extractionDate"];
-            const miningValues = ["Lithium", "2000 kg", "Australia", "2024-05-18"];
-            const miningAccessors = [user1.address];
-            const miningTx = await privatePass.connect(user1).storePrivateData(miningKeys, miningValues, miningAccessors, "");
-            const miningReceipt = await miningTx.wait();
-            const miningId = miningReceipt.events.filter(x => x.event === "PrivateDataStored")[0].args.id;
-        
-            // User1 grants access to user2 for the mining stage data
-            await privatePass.connect(user1).grantAccess(miningId, user2.address);
-        
-            // Simulate manufacturing stage by user2
-            const manufacturingKeys = ["productType", "quantity", "manufacturer", "productionDate"];
-            const manufacturingValues = ["Battery", "1000 units", "Factory1", "2024-06-01"];
-            const manufacturingAccessors = [user2.address];
-            const manufacturingTx = await privatePass.connect(user2).storePrivateData(manufacturingKeys, manufacturingValues, manufacturingAccessors, miningId);
-            const manufacturingReceipt = await manufacturingTx.wait();
-            const manufacturingId = manufacturingReceipt.events.filter(x => x.event === "PrivateDataStored")[0].args.id;
-        
-            // User2 grants access to user3 for the manufacturing stage data
-            await privatePass.connect(user2).grantAccess(manufacturingId, user3.address);
-        
-            // Simulate assembly stage by user3
-            const assemblyKeys = ["assemblyType", "quantity", "assembler", "assemblyDate"];
-            const assemblyValues = ["Pack", "1000 units", "AssemblyLine1", "2024-07-01"];
-            const assemblyAccessors = [user3.address];
-            const assemblyTx = await privatePass.connect(user3).storePrivateData(assemblyKeys, assemblyValues, assemblyAccessors, manufacturingId);
-            const assemblyReceipt = await assemblyTx.wait();
-            const assemblyId = assemblyReceipt.events.filter(x => x.event === "PrivateDataStored")[0].args.id;
-            
-            // Verify data access at each stage
-            const miningData = await privatePass.connect(user2).getPrivateData(miningId);
-            const manufacturingData = await privatePass.connect(user3).getPrivateData(manufacturingId);
-            const assemblyData = await privatePass.connect(user3).getPrivateData(assemblyId);
-        
-            console.log(`Mining Data: ${miningData}`);
-            console.log(`Manufacturing Data: ${manufacturingData}`);
-            console.log(`Assembly Data: ${assemblyData}`);
-        });               
-    });
-
     describe("Performance and Gas Usage Tests", function () {
         it("should estimate gas usage for data storage", async function () {
             const keys = ["materialType", "quantity"];

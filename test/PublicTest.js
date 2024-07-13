@@ -219,17 +219,6 @@ describe("PublicPass Contract Tests", function () {
         });
     });
 
-    describe("Security and Access Control Tests", function () {
-        it("should enforce access restrictions", async function () {
-            const keys = ["materialType", "quantity"];
-            const values = ["Lithium", "1000 kg"];
-            const tx = await publicPass.connect(miner).storePublicData(keys, values, "");
-            const receipt = await tx.wait();
-            const newId = receipt.events[0].args.id;
-            await expect(publicPass.connect(research).storePublicData(keys, values, newId)).to.be.rejected;
-        });
-    });
-
     describe("Performance and Gas Usage Tests", function () {
         it("should estimate gas usage for data storage", async function () {
             const keys = ["materialType", "quantity"];

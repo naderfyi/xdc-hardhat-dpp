@@ -12,7 +12,6 @@ contract PrivatePass {
     }
 
     mapping(string => Entry) public dataEntries;
-    mapping(address => bool) public hasShipment;
 
     uint256 private nonce; // Nonce for unique ID generation
 
@@ -26,7 +25,6 @@ contract PrivatePass {
         require(_keys.length == _values.length, "Keys and values length mismatch");
         if (bytes(_previousId).length > 0) {
             require(dataEntries[_previousId].owner != address(0), "Previous ID does not exist");
-            require(hasShipment[msg.sender], "Sender does not have a shipment");
         }
 
         string memory newId = generateUniqueId();
@@ -48,7 +46,6 @@ contract PrivatePass {
         }
 
         updateLinks(_previousId, newId);
-        hasShipment[msg.sender] = true;
 
         return newId;
     }
